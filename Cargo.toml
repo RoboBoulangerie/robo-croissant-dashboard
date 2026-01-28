@@ -1,0 +1,13 @@
+[package]
+name = "robo-croissant-dashboard"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rocket = { version = "0.5.1", features = ["json"] }
+rocket_dyn_templates = { version = "0.2.0", features = ["tera"] }
+tera = "1.20.1"
+diesel = { version = "2", features = ["returning_clauses_for_sqlite_3_35", "sqlite", "serde_json"] }
+rocket_sync_db_pools = { version = "0.1.0", features = ["diesel_sqlite_pool"]}
+serde_json = "1.0.149"
+lazy_static = "1.5.0"

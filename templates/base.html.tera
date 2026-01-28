@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>{{ title }} </title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: #fff;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #007bff;
+            color: white;
+            text-transform: uppercase;
+            font-size: 14px;
+            letter-spacing: 0.05em;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        .actions {
+            text-align: right;
+            white-space: nowrap;
+        }
+        .btn {
+            text-decoration: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 13px;
+            margin-left: 8px;
+            transition: background-color 0.3s;
+        }
+        .btn-validate {
+            background-color: #28a745;
+            color: white;
+        }
+        .btn-validate:hover {
+            background-color: #218838;
+        }
+        .btn-update {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .btn-update:hover {
+            background-color: #e0a800;
+        }
+        .btn-download {
+            background-color: #17a2b8;
+            color: white;
+        }
+        .btn-download:hover {
+            background-color: #138496;
+        }
+        nav {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        nav a {
+            text-decoration: none;
+            color: #007bff;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        nav a:hover {
+            text-decoration: underline;
+        }
+    </style>
+  </head>
+  <body>
+    {% include "nav" %}
+
+    {% block content %}{% endblock content %}
+
+      <footer>
+      </footer>
+  </body>
+</html>

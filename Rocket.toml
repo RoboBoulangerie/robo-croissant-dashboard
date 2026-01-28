@@ -1,0 +1,27 @@
+[default]
+ident = "Robo Croissant"
+template_dir = "templates"
+
+[default.limits]
+json = "1 MiB"
+msgpack = "2 MiB"
+"file/jpg" = "5 MiB"
+
+[default.databases.diesel]
+url = "db/robo_croissant.db"
+timeout = 10
+
+[debug]
+address = "127.0.0.1"
+port = 8000
+workers = 1
+keep_alive = 0
+log_level = "debug"
+
+[release]
+address = "0.0.0.0"
+port = 8000
+workers = 4
+keep_alive = 5
+log_level = "debug"
+extra = false
