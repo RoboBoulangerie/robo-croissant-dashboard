@@ -1,52 +1,455 @@
 {% extends "base" %}
 
 {% block content %}
-    <style>
-        .update-container {
-            background-color: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        .textarea-container {
-            margin-bottom: 20px;
-        }
-        textarea {
-            width: 100%;
-            height: 400px;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 14px;
-            box-sizing: border-box;
-            resize: vertical;
-        }
-        .button-group {
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-        }
-        .btn-cancel {
-            background-color: #6c757d;
-            color: white;
-        }
-        .btn-cancel:hover {
-            background-color: #5a6268;
-        }
-    </style>
+<style>
+    .review-header {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+        padding: 14px 18px;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+    }
+    .progress-stats {
+        display: flex;
+        gap: 18px;
+        font-size: 14px;
+    }
+    .stat { display: flex; align-items: center; gap: 5px; }
+    .stat strong { font-size: 18px; }
+    .stat-accepted strong { color: #28a745; }
+    .stat-edited   strong { color: #007bff; }
+    .stat-remaining strong { color: #6c757d; }
+    .stat-divider { color: #dee2e6; font-size: 20px; }
+    .review-actions { display: flex; gap: 10px; align-items: center; }
+    .btn-export {
+        background: #17a2b8;
+        color: white;
+        padding: 6px 14px;
+        border-radius: 4px;
+        font-size: 13px;
+        text-decoration: none;
+        border: none;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    .btn-export:hover:not(.btn-disabled) { background: #138496; }
+    .btn-export.btn-disabled {
+        background: #b0c4cc;
+        pointer-events: none;
+        opacity: 0.6;
+        cursor: default;
+    }
+    .field-group {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+        margin-bottom: 20px;
+        overflow: hidden;
+    }
+    .field-group-header {
+        background: #495057;
+        color: white;
+        padding: 8px 16px;
+        font-size: 12px;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+    }
+    .fields-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    .fields-table th {
+        background: #007bff;
+        color: white;
+        padding: 8px 12px;
+        text-align: left;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    .fields-table td {
+        padding: 9px 12px;
+        border-bottom: 1px solid #f0f0f0;
+        vertical-align: middle;
+        font-size: 13px;
+    }
+    .fields-table tr:last-child td { border-bottom: none; }
+    .fields-table tr.row-accepted { background: #f0faf2; }
+    .fields-table tr.row-edited   { background: #fff8e1; }
+    .field-path {
+        font-family: 'Courier New', monospace;
+        font-size: 11px;
+        color: #666;
+        white-space: nowrap;
+        width: 180px;
+    }
+    .val-display {
+        display: block;
+        max-width: 340px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .val-input {
+        width: 100%;
+        min-width: 240px;
+        padding: 5px 7px;
+        border: 1px solid #007bff;
+        border-radius: 4px;
+        font-size: 13px;
+        box-sizing: border-box;
+    }
+    .src-display a {
+        font-size: 12px;
+        color: #007bff;
+        text-decoration: none;
+        max-width: 200px;
+        display: inline-block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        vertical-align: middle;
+    }
+    .src-display a:hover { text-decoration: underline; }
+    .src-input {
+        width: 100%;
+        min-width: 180px;
+        padding: 5px 7px;
+        border: 1px solid #007bff;
+        border-radius: 4px;
+        font-size: 12px;
+        box-sizing: border-box;
+    }
+    .src-input::placeholder { color: #aaa; font-style: italic; }
+    .no-source { color: #bbb; font-size: 12px; }
+    .badge {
+        display: inline-block;
+        padding: 2px 7px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: bold;
+        white-space: nowrap;
+    }
+    .badge-high     { background: #d4edda; color: #155724; }
+    .badge-medium   { background: #fff3cd; color: #856404; }
+    .badge-low      { background: #f8d7da; color: #721c24; }
+    .badge-unknown  { background: #e2e3e5; color: #383d41; }
+    .badge-accepted { background: #c3e6cb; color: #155724; }
+    .badge-edited   { background: #cce5ff; color: #004085; }
+    .row-btn {
+        padding: 3px 9px;
+        font-size: 12px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-left: 3px;
+        white-space: nowrap;
+    }
+    .btn-accept  { background: #28a745; color: white; }
+    .btn-accept:hover  { background: #218838; }
+    .btn-edit    { background: #6c757d; color: white; }
+    .btn-edit:hover    { background: #5a6268; }
+    .btn-confirm { background: #007bff; color: white; }
+    .btn-confirm:hover { background: #0069d9; }
+    .btn-cancel-row  { background: #dc3545; color: white; }
+    .btn-cancel-row:hover  { background: #c82333; }
+    .full-json-section {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    .full-json-section h4 {
+        margin: 0 0 12px 0;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #666;
+    }
+    .full-json-section textarea {
+        width: 100%;
+        height: 340px;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        box-sizing: border-box;
+        resize: vertical;
+    }
+    .button-group {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 12px;
+    }
+    .btn-cancel-link {
+        background: #6c757d;
+        color: white;
+        padding: 6px 14px;
+        border-radius: 4px;
+        font-size: 13px;
+        text-decoration: none;
+    }
+    .btn-cancel-link:hover { background: #5a6268; }
+</style>
 
-    <h3>Robo Croissant Metadata - Update: {{ item.name }}</h3>
+<h3>Update: {{ item.name }}</h3>
 
-    <div class="update-container">
-        <form action="/update/{{ item.name }}" method="POST">
-            <div class="textarea-container">
-                <textarea name="croissant_metadata">{{ item.croissant_metadata | json_encode(pretty=true) | safe }}</textarea>
-            </div>
-            <div class="button-group">
-                <a href="/" class="btn btn-cancel">Cancel</a>
-                <button type="submit" class="btn btn-update">Update</button>
-            </div>
-        </form>
+<!-- Sticky review header with progress + actions -->
+<div class="review-header">
+    <div class="progress-stats">
+        <div class="stat stat-accepted">
+            <span>✓ Accepted</span>
+            <strong id="count-accepted">0</strong>
+        </div>
+        <span class="stat-divider">|</span>
+        <div class="stat stat-edited">
+            <span>✎ Edited</span>
+            <strong id="count-edited">0</strong>
+        </div>
+        <span class="stat-divider">|</span>
+        <div class="stat stat-remaining">
+            <span>◷ Remaining</span>
+            <strong id="count-remaining">{{ total_fields }}</strong>
+        </div>
     </div>
+    <div class="review-actions">
+        <form id="changes-form" action="/update/{{ item.name }}/fields" method="POST" style="display:inline">
+            <input type="hidden" name="fields_json" id="fields-json-input">
+            <button type="submit" id="save-btn" class="btn btn-update" disabled>Save Edits</button>
+        </form>
+        <a id="export-btn"
+           href="/knowledge_source/{{ item.name }}"
+           download="{{ item.name }}.json"
+           class="btn-export btn-disabled">
+            Export JSON
+        </a>
+    </div>
+</div>
+
+<!-- Field groups -->
+{% for group in groups %}
+<div class="field-group">
+    <div class="field-group-header">{{ group.name }}</div>
+    <table class="fields-table">
+        <thead>
+            <tr>
+                <th style="width:180px">Field</th>
+                <th>Value</th>
+                <th style="width:210px">Source URL</th>
+                <th style="width:90px">Confidence</th>
+                <th style="width:150px"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for field in group.fields %}
+            <tr data-path="{{ field.path }}"
+                data-orig-value="{{ field.value }}"
+                data-orig-source="{{ field.source_url }}"
+                data-current-value="{{ field.value }}"
+                data-current-source="{{ field.source_url }}"
+                data-state="unreviewed">
+                <td class="field-path" title="{{ field.path }}">{{ field.display_path }}</td>
+                <td>
+                    <span class="val-display" title="{{ field.value }}">{{ field.value }}</span>
+                    <input class="val-input" type="text" value="{{ field.value }}" style="display:none">
+                </td>
+                <td>
+                    <span class="src-display">
+                        {% if field.source_url %}
+                            <a href="{{ field.source_url }}" target="_blank" title="{{ field.source_url }}">{{ field.source_url }}</a>
+                        {% else %}
+                            <span class="no-source">—</span>
+                        {% endif %}
+                    </span>
+                    <input class="src-input" type="text" value="{{ field.source_url }}"
+                           placeholder="URL where you found this" style="display:none">
+                </td>
+                <td><span class="conf-badge"><span class="badge badge-{{ field.confidence_label }}">{{ field.confidence_display }}</span></span></td>
+                <td class="row-actions">
+                    <!-- Default state -->
+                    <button type="button" class="row-btn btn-accept accept-btn">Accept</button>
+                    <button type="button" class="row-btn btn-edit edit-btn">Edit</button>
+                    <!-- Edit mode -->
+                    <button type="button" class="row-btn btn-confirm confirm-btn" style="display:none">Accept</button>
+                    <button type="button" class="row-btn btn-cancel-row cancel-btn" style="display:none">Cancel</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endfor %}
+
+<!-- Full JSON editor -->
+<div class="full-json-section">
+    <h4>Full Croissant Metadata (JSON)</h4>
+    <form action="/update/{{ item.name }}" method="POST">
+        <textarea name="croissant_metadata">{{ item.croissant_metadata | json_encode(pretty=true) | safe }}</textarea>
+        <div class="button-group">
+            <a href="/" class="btn-cancel-link">Cancel</a>
+            <button type="submit" class="btn btn-update">Save Full JSON</button>
+        </div>
+    </form>
+</div>
+
+<script>
+var totalFields = {{ total_fields }};
+var pendingEdits = {};      // path → {path, value, source_url, original_value} — only actual changes
+var reviewedPaths = new Set();  // all paths marked accepted or edited
+
+function updateProgress() {
+    var edited = Object.keys(pendingEdits).length;
+    var accepted = reviewedPaths.size - edited;
+    var remaining = totalFields - reviewedPaths.size;
+
+    document.getElementById('count-accepted').textContent = accepted;
+    document.getElementById('count-edited').textContent = edited;
+    document.getElementById('count-remaining').textContent = remaining;
+
+    document.getElementById('save-btn').disabled = (edited === 0);
+
+    var exportBtn = document.getElementById('export-btn');
+    if (remaining === 0) {
+        exportBtn.classList.remove('btn-disabled');
+    } else {
+        exportBtn.classList.add('btn-disabled');
+    }
+}
+
+function markAccepted(row) {
+    row.classList.remove('row-edited');
+    row.classList.add('row-accepted');
+    row.dataset.state = 'accepted';
+    row.querySelector('.conf-badge').innerHTML =
+        '<span class="badge badge-accepted">✓ Accepted</span>';
+}
+
+function markEdited(row, newValue, newSource) {
+    row.classList.remove('row-accepted');
+    row.classList.add('row-edited');
+    row.dataset.state = 'edited';
+    row.dataset.currentValue = newValue;
+    row.dataset.currentSource = newSource;
+
+    var valDisplay = row.querySelector('.val-display');
+    valDisplay.textContent = newValue;
+    valDisplay.title = newValue;
+
+    var srcDisplay = row.querySelector('.src-display');
+    if (newSource) {
+        srcDisplay.innerHTML =
+            '<a href="' + newSource + '" target="_blank" title="' + newSource + '">' + newSource + '</a>';
+    } else {
+        srcDisplay.innerHTML = '<span class="no-source">—</span>';
+    }
+
+    row.querySelector('.conf-badge').innerHTML =
+        '<span class="badge badge-edited">✎ Edited</span>';
+}
+
+function enterEditMode(row) {
+    row.querySelector('.val-input').value = row.dataset.currentValue;
+    row.querySelector('.src-input').value = row.dataset.currentSource;
+
+    row.querySelector('.val-display').style.display = 'none';
+    row.querySelector('.val-input').style.display = 'block';
+    row.querySelector('.src-display').style.display = 'none';
+    row.querySelector('.src-input').style.display = 'block';
+    row.querySelector('.accept-btn').style.display = 'none';
+    row.querySelector('.edit-btn').style.display = 'none';
+    row.querySelector('.confirm-btn').style.display = 'inline-block';
+    row.querySelector('.cancel-btn').style.display = 'inline-block';
+    row.querySelector('.val-input').focus();
+}
+
+function exitEditMode(row) {
+    row.querySelector('.val-display').style.display = '';
+    row.querySelector('.val-input').style.display = 'none';
+    row.querySelector('.src-display').style.display = '';
+    row.querySelector('.src-input').style.display = 'none';
+    row.querySelector('.accept-btn').style.display = '';
+    row.querySelector('.edit-btn').style.display = '';
+    row.querySelector('.confirm-btn').style.display = 'none';
+    row.querySelector('.cancel-btn').style.display = 'none';
+}
+
+// Quick Accept (no editing needed)
+document.querySelectorAll('.accept-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var row = this.closest('tr');
+        var path = row.dataset.path;
+        reviewedPaths.add(path);
+        delete pendingEdits[path];
+        markAccepted(row);
+        updateProgress();
+    });
+});
+
+// Enter edit mode
+document.querySelectorAll('.edit-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        enterEditMode(this.closest('tr'));
+    });
+});
+
+// Confirm edit
+document.querySelectorAll('.confirm-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var row = this.closest('tr');
+        var path = row.dataset.path;
+        var newValue = row.querySelector('.val-input').value;
+        var newSource = row.querySelector('.src-input').value;
+        var origValue = row.dataset.origValue;
+        var origSource = row.dataset.origSource;
+
+        var valueChanged = (newValue !== origValue) || (newSource !== origSource);
+
+        reviewedPaths.add(path);
+
+        if (valueChanged) {
+            pendingEdits[path] = {
+                path: path,
+                value: newValue,
+                source_url: newSource,
+                original_value: origValue
+            };
+            markEdited(row, newValue, newSource);
+        } else {
+            // Nothing changed — treat as accepted
+            delete pendingEdits[path];
+            markAccepted(row);
+        }
+
+        exitEditMode(row);
+        updateProgress();
+    });
+});
+
+// Cancel edit — exit without changing review state
+document.querySelectorAll('.cancel-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        exitEditMode(this.closest('tr'));
+    });
+});
+
+// On save: submit only actual edits
+document.getElementById('changes-form').addEventListener('submit', function(e) {
+    var edits = Object.values(pendingEdits);
+    if (edits.length === 0) { e.preventDefault(); return; }
+    document.getElementById('fields-json-input').value = JSON.stringify(edits);
+});
+</script>
+
 {% endblock content %}

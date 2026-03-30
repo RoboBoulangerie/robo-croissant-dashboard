@@ -6,6 +6,7 @@
         <thead>
             <tr>
                 <th>Name</th>
+                <th>URL</th>
                 <th class="actions">Actions</th>
             </tr>
         </thead>
@@ -13,9 +14,16 @@
             {% for s in items %}
                 <tr>
                     <td>{{ s.name }}</td>
+                    <td>
+                        {% if s.url %}
+                            <a href="{{ s.url }}" target="_blank">{{ s.url }}</a>
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
                     <td class="actions">
                         <form action="https://search.google.com/test/rich-results?utm_campaign=devsite&utm_medium=jsonld&utm_source=dataset" method="POST" target="_blank" style="display:inline;">
-                            <textarea style="display:none" name="code_snippet">{{ s.croissant_metadata | json_encode(pretty=true) | safe }}</textarea>
+                            <textarea style="display:none" name="code_snippet">{{ s.clean_metadata | json_encode(pretty=true) | safe }}</textarea>
                             <button type="submit" class="btn btn-validate">Validate</button>
                         </form>
                         <a href="/update/{{ s.name }}" class="btn btn-update">Update</a>
