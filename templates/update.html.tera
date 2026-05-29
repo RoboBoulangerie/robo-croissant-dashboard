@@ -230,7 +230,7 @@
             <button type="submit" id="save-btn" class="btn btn-update" disabled>Save Edits</button>
         </form>
         <a id="export-btn"
-           href="/knowledge_source/{{ item.name }}"
+           href="/knowledge_base/{{ item.name }}"
            download="{{ item.name }}.json"
            class="btn-export btn-disabled">
             Export JSON
@@ -256,24 +256,24 @@
             {% for field in group.fields %}
             <tr data-path="{{ field.path }}"
                 data-orig-value="{{ field.value }}"
-                data-orig-source="{{ field.source_url }}"
+                data-orig-source="{{ field.url }}"
                 data-current-value="{{ field.value }}"
-                data-current-source="{{ field.source_url }}"
+                data-current-source="{{ field.url }}"
                 data-state="unreviewed">
-                <td class="field-path" title="{{ field.path }}">{{ field.display_path }}</td>
+                <td class="field-path" title="{{ field.path }}">{{ field.path }}</td>
                 <td>
                     <span class="val-display" title="{{ field.value }}">{{ field.value }}</span>
                     <input class="val-input" type="text" value="{{ field.value }}" style="display:none">
                 </td>
                 <td>
                     <span class="src-display">
-                        {% if field.source_url %}
-                            <a href="{{ field.source_url }}" target="_blank" title="{{ field.source_url }}">{{ field.source_url }}</a>
+                        {% if field.url %}
+                            <a href="{{ field.url }}" target="_blank" title="{{ field.url }}">{{ field.url }}</a>
                         {% else %}
                             <span class="no-source">—</span>
                         {% endif %}
                     </span>
-                    <input class="src-input" type="text" value="{{ field.source_url }}"
+                    <input class="src-input" type="text" value="{{ field.url }}"
                            placeholder="URL where you found this" style="display:none">
                 </td>
                 <td><span class="conf-badge"><span class="badge badge-{{ field.confidence_label }}">{{ field.confidence_display }}</span></span></td>
@@ -422,7 +422,7 @@ document.querySelectorAll('.confirm-btn').forEach(function(btn) {
             pendingEdits[path] = {
                 path: path,
                 value: newValue,
-                source_url: newSource,
+                url: newSource,
                 original_value: origValue
             };
             markEdited(row, newValue, newSource);
