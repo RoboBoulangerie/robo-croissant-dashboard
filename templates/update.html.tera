@@ -47,6 +47,18 @@
         opacity: 0.6;
         cursor: default;
     }
+    .btn-validate {
+        background: #6f42c1;
+        color: white;
+        padding: 6px 14px;
+        border-radius: 4px;
+        font-size: 13px;
+        border: none;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    .btn-validate:hover:not(:disabled) { background: #5a32a3; }
+    .btn-validate:disabled { background: #b8a7d9; cursor: default; }
     .field-group {
         background: #fff;
         border-radius: 8px;
@@ -66,6 +78,7 @@
     .fields-table {
         width: 100%;
         border-collapse: collapse;
+        table-layout: fixed;
     }
     .fields-table th {
         background: #007bff;
@@ -76,6 +89,20 @@
         text-transform: uppercase;
         letter-spacing: 0.05em;
     }
+    .delta-badge {
+        display: inline-block;
+        background: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffc107;
+        font-size: 10px;
+        font-weight: bold;
+        padding: 1px 5px;
+        border-radius: 3px;
+        margin-left: 4px;
+        vertical-align: middle;
+        white-space: nowrap;
+        cursor: help;
+    }
     .fields-table td {
         padding: 9px 12px;
         border-bottom: 1px solid #f0f0f0;
@@ -84,13 +111,40 @@
     }
     .fields-table tr:last-child td { border-bottom: none; }
     .fields-table tr.row-accepted { background: #f0faf2; }
+    .fields-table tr.row-auto     { background: #e8f4f8; }
     .fields-table tr.row-edited   { background: #fff8e1; }
+    .fields-table tr.row-flagged  { background: #fff0f0; }
+    .fields-table tr.row-accepted.row-flagged { background: #f0faf2; }
+    .flag-badge {
+        display: inline-block;
+        background: #dc3545;
+        color: white;
+        font-size: 10px;
+        font-weight: bold;
+        padding: 1px 5px;
+        border-radius: 3px;
+        margin-left: 4px;
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+    .issue-detail {
+        display: block;
+        font-size: 10px;
+        color: #dc3545;
+        margin-top: 3px;
+        font-style: italic;
+        max-width: 340px;
+        white-space: normal;
+        word-break: break-word;
+        overflow-wrap: break-word;
+    }
     .field-path {
         font-family: 'Courier New', monospace;
         font-size: 11px;
         color: #666;
         white-space: nowrap;
-        width: 180px;
+        width: 240px;
+        overflow: hidden;
     }
     .val-display {
         display: block;
@@ -98,6 +152,14 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        cursor: pointer;
+    }
+    .val-display:hover { text-decoration: underline dotted #999; }
+    .val-display.expanded {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: unset;
+        word-break: break-word;
     }
     .val-input {
         width: 100%;
@@ -144,6 +206,7 @@
     .badge-low      { background: #f8d7da; color: #721c24; }
     .badge-unknown  { background: #e2e3e5; color: #383d41; }
     .badge-accepted { background: #c3e6cb; color: #155724; }
+    .badge-auto     { background: #d1ecf1; color: #0c5460; }
     .badge-edited   { background: #cce5ff; color: #004085; }
     .row-btn {
         padding: 3px 9px;
@@ -202,6 +265,188 @@
         text-decoration: none;
     }
     .btn-cancel-link:hover { background: #5a6268; }
+    .pagination {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 16px 0 8px;
+        font-size: 13px;
+        color: #555;
+    }
+    .btn-page {
+        padding: 5px 14px;
+        border-radius: 4px;
+        font-size: 13px;
+        text-decoration: none;
+        background: #007bff;
+        color: white;
+        border: none;
+        cursor: pointer;
+    }
+    .btn-page:hover { background: #0069d9; }
+    .btn-page.disabled {
+        background: #c8d6e0;
+        pointer-events: none;
+        cursor: default;
+    }
+    .page-info { color: #666; font-size: 12px; }
+    .schema-panel {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+        margin-bottom: 20px;
+        overflow: hidden;
+    }
+    .schema-panel-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 18px;
+        cursor: pointer;
+        user-select: none;
+        background: #343a40;
+        color: white;
+    }
+    .schema-panel-header:hover { background: #23272b; }
+    .schema-panel-title { font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.06em; }
+    .schema-counts { font-weight: normal; font-size: 12px; opacity: 0.65; margin-left: 8px; }
+    .schema-warn-badge {
+        background: #ffc107; color: #333; border-radius: 10px;
+        padding: 1px 8px; font-size: 11px; font-weight: bold; margin-left: auto;
+    }
+    .schema-toggle-icon { font-size: 11px; opacity: 0.6; margin-left: 6px; transition: transform 0.2s; }
+    .schema-toggle-icon.open { transform: rotate(90deg); }
+    .schema-panel-body { display: none; }
+    .schema-table { width: 100%; border-collapse: collapse; }
+    .schema-table th {
+        background: #f8f9fa; color: #495057; padding: 7px 12px;
+        text-align: left; font-size: 11px; text-transform: uppercase;
+        letter-spacing: 0.05em; border-bottom: 2px solid #dee2e6;
+    }
+    .schema-table td { padding: 7px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+    .schema-table tr:last-child td { border-bottom: none; }
+    .schema-row-dup { background: #f8f9fa; }
+    .schema-row-ph  { background: #fff5f5; }
+    .schema-row-ok  { background: #fafafa; }
+    .schema-badge {
+        display: inline-block; padding: 2px 8px; border-radius: 10px;
+        font-size: 11px; font-weight: bold; white-space: nowrap;
+    }
+    .schema-badge-ok     { background: #d4edda; color: #155724; }
+    .schema-badge-shared { background: #e2e3e5; color: #383d41; }
+    .schema-badge-ph     { background: #f8d7da; color: #721c24; }
+    .schema-members { font-family: 'Courier New', monospace; font-size: 11px; }
+    .schema-member {
+        display: inline-block; background: #e9ecef; border-radius: 3px;
+        padding: 1px 6px; margin: 1px 2px; max-width: 260px;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        vertical-align: middle; color: #495057;
+    }
+    .schema-member-canonical { background: #cce5ff; color: #004085; }
+    .schema-summary { font-size: 12px; color: #777; font-style: italic; max-width: 280px; }
+    .schema-hint {
+        padding: 10px 18px; background: #fff8e1; font-size: 12px;
+        color: #856404; border-top: 1px solid #ffeeba;
+    }
+    /* ── Suggested fixes panel ── */
+    .fix-panel-header {
+        background: #1a3a5c;
+        color: white;
+        padding: 11px 18px;
+        border-radius: 6px 6px 0 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 13px;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+    }
+    .fix-panel-count {
+        background: rgba(255,255,255,0.2);
+        border-radius: 10px;
+        padding: 1px 8px;
+        font-size: 11px;
+    }
+    .fix-card {
+        background: #fff;
+        border: 1px solid #dee2e6;
+        border-top: none;
+        padding: 16px 18px;
+    }
+    .fix-card + .fix-card { border-top: 1px solid #eee; }
+    .fix-card:last-child { border-radius: 0 0 6px 6px; }
+    .fix-card-title {
+        font-weight: bold;
+        font-size: 14px;
+        margin-bottom: 4px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .fix-card-desc { font-size: 13px; color: #555; margin-bottom: 12px; }
+    .fix-preview {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 10px 14px;
+        font-family: 'Courier New', monospace;
+        font-size: 11px;
+        white-space: pre-wrap;
+        max-height: 200px;
+        overflow-y: auto;
+        margin-bottom: 12px;
+    }
+    .fix-params { margin-bottom: 12px; }
+    .fix-param-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+    .fix-param-label { font-size: 12px; font-weight: bold; min-width: 140px; padding-top: 6px; color: #444; }
+    .fix-param-input {
+        flex: 1;
+        padding: 5px 8px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        font-size: 13px;
+        font-family: 'Courier New', monospace;
+    }
+    .fix-param-hint { font-size: 11px; color: #888; margin-top: 3px; }
+    .fix-actions { display: flex; gap: 8px; align-items: center; }
+    .btn-fix-apply {
+        background: #28a745;
+        color: white;
+        border: none;
+        padding: 7px 18px;
+        border-radius: 4px;
+        font-size: 13px;
+        cursor: pointer;
+        font-weight: bold;
+    }
+    .btn-fix-apply:hover { background: #218838; }
+    .btn-fix-apply:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-fix-dismiss {
+        background: none;
+        border: 1px solid #aaa;
+        color: #666;
+        padding: 6px 14px;
+        border-radius: 4px;
+        font-size: 12px;
+        cursor: pointer;
+    }
+    .btn-fix-dismiss:hover { background: #f8f9fa; }
+    .fix-toggle-preview {
+        font-size: 11px;
+        color: #0070d0;
+        cursor: pointer;
+        text-decoration: underline;
+        background: none;
+        border: none;
+        padding: 0;
+        margin-bottom: 8px;
+        display: inline-block;
+    }
+    .fix-status { font-size: 12px; margin-left: 10px; }
+    .fix-status-ok  { color: #28a745; font-weight: bold; }
+    .fix-status-err { color: #dc3545; }
 </style>
 
 <h3>Update: {{ item.name }}</h3>
@@ -210,8 +455,8 @@
 <div class="review-header">
     <div class="progress-stats">
         <div class="stat stat-accepted">
-            <span>✓ Accepted</span>
-            <strong id="count-accepted">0</strong>
+            <span>✓ Reviewed</span>
+            <strong id="count-accepted">—</strong>
         </div>
         <span class="stat-divider">|</span>
         <div class="stat stat-edited">
@@ -221,22 +466,95 @@
         <span class="stat-divider">|</span>
         <div class="stat stat-remaining">
             <span>◷ Remaining</span>
-            <strong id="count-remaining">{{ total_fields }}</strong>
+            <strong id="count-remaining">—</strong>
         </div>
+        {% if total_pages > 1 %}
+        <span class="stat-divider">|</span>
+        <div class="stat" style="color:#666;font-size:12px;">
+            Page {{ current_page + 1 }} of {{ total_pages }} &nbsp;·&nbsp; {{ total_fields }} total fields
+        </div>
+        {% endif %}
     </div>
     <div class="review-actions">
-        <form id="changes-form" action="/update/{{ item.name }}/fields" method="POST" style="display:inline">
+        <button type="button" id="validate-btn" class="btn-validate"
+                onclick="runValidation('{{ item.name | urlencode }}')">
+            ⚙ Run Auto-Validation
+        </button>
+        <form id="changes-form" action="/update/{{ item.name }}/fields?page={{ current_page }}" method="POST" style="display:inline">
             <input type="hidden" name="fields_json" id="fields-json-input">
-            <button type="submit" id="save-btn" class="btn btn-update" disabled>Save Edits</button>
+            <input type="hidden" name="accepted_json" id="accepted-json-input">
+            <button type="submit" id="save-btn" class="btn btn-update" disabled>Save Progress</button>
         </form>
         <a id="export-btn"
            href="/knowledge_base/{{ item.name }}"
            download="{{ item.name }}.json"
-           class="btn-export btn-disabled">
+           class="btn-export">
             Export JSON
         </a>
     </div>
 </div>
+
+<!-- Suggested fixes panel (loaded async) -->
+<div id="fix-suggestions-panel" style="display:none;margin-bottom:16px"></div>
+
+<!-- Schema structure panel (only shown when recordSets exist) -->
+{% set has_schema_issues = false %}
+{% for sg in schema_groups %}{% if sg.has_placeholders %}{% set_global has_schema_issues = true %}{% endif %}{% endfor %}
+
+{% if schema_groups | length > 0 %}
+<div class="schema-panel" id="schema-panel">
+    <div class="schema-panel-header" onclick="toggleSchema()">
+        <span class="schema-panel-title">
+            Schema Structure
+            <span class="schema-counts">
+                {{ schema_groups | length }} unique schema{% if schema_groups | length != 1 %}s{% endif %}
+                across {{ total_record_sets }} recordSets
+            </span>
+        </span>
+        {% if has_schema_issues %}
+        <span class="schema-warn-badge">⚠ structural issues</span>
+        {% endif %}
+        <span class="schema-toggle-icon" id="schema-icon">▶</span>
+    </div>
+    <div class="schema-panel-body" id="schema-body" {% if has_schema_issues %}style="display:block"{% endif %}>
+        <table class="schema-table">
+            <thead>
+                <tr>
+                    <th style="width:90px">Status</th>
+                    <th style="width:60px">Fields</th>
+                    <th>RecordSet(s)</th>
+                    <th>Schema (first fields)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sg in schema_groups %}
+                <tr class="{% if sg.has_placeholders %}schema-row-ph{% elif sg.is_duplicate %}schema-row-dup{% else %}schema-row-ok{% endif %}">
+                    <td>
+                        {% if sg.has_placeholders %}
+                        <span class="schema-badge schema-badge-ph">placeholder</span>
+                        {% elif sg.is_duplicate %}
+                        <span class="schema-badge schema-badge-shared">{{ sg.members | length }}× shared schema</span>
+                        {% else %}
+                        <span class="schema-badge schema-badge-ok">unique</span>
+                        {% endif %}
+                    </td>
+                    <td style="text-align:center;color:#666;font-size:12px">{{ sg.field_count }}</td>
+                    <td class="schema-members">
+                        {% for m in sg.members %}
+                        <span class="schema-member" title="{{ m }}">{{ m }}</span>
+                        {% endfor %}
+                    </td>
+                    <td class="schema-summary" title="{{ sg.schema_summary }}">{{ sg.schema_summary }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="schema-hint">
+            <strong>Shared schema</strong> — multiple recordSets with identical field definitions. This is valid Croissant; Croissant 1.1 has no schema inheritance, so separate recordSets for semantically distinct datasets (e.g. <em>Accepted</em> vs <em>AcceptedAndSubmitted</em>) is correct even when columns are identical. Consider consolidating into a FileSet only if the files are truly the same logical table. &nbsp;|&nbsp; <strong>Placeholder</strong> — field names like <code>column_1</code>, <code>column_2</code> indicate the LLM could not read the file headers; these should be corrected.
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <!-- Field groups -->
 {% for group in groups %}
@@ -245,7 +563,7 @@
     <table class="fields-table">
         <thead>
             <tr>
-                <th style="width:180px">Field</th>
+                <th style="width:240px">Field</th>
                 <th>Value</th>
                 <th style="width:210px">Source URL</th>
                 <th style="width:90px">Confidence</th>
@@ -259,8 +577,22 @@
                 data-orig-source="{{ field.url }}"
                 data-current-value="{{ field.value }}"
                 data-current-source="{{ field.url }}"
-                data-state="unreviewed">
-                <td class="field-path" title="{{ field.path }}">{{ field.path }}</td>
+                data-state="unreviewed"
+                data-pre-accepted="{{ field.pre_accepted }}"
+                data-pre-auto-reviewed="{{ field.pre_auto_reviewed }}"
+                {% if field.issue_type %}class="row-flagged"{% endif %}>
+                <td class="field-path" title="{{ field.path }}">
+                    {{ field.path }}
+                    {% if field.run_changed %}
+                    <a href="/compare/{{ item.name | urlencode }}/seek?path={{ field.path | urlencode }}" title="Value changed across runs — click to compare">
+                        <span class="delta-badge">Δ</span>
+                    </a>
+                    {% endif %}
+                    {% if field.issue_type %}
+                    <span class="flag-badge">⚑ {{ field.issue_type | replace(from="_", to=" ") }}</span>
+                    <span class="issue-detail">{{ field.issue_detail }}</span>
+                    {% endif %}
+                </td>
                 <td>
                     <span class="val-display" title="{{ field.value }}">{{ field.value }}</span>
                     <input class="val-input" type="text" value="{{ field.value }}" style="display:none">
@@ -276,7 +608,17 @@
                     <input class="src-input" type="text" value="{{ field.url }}"
                            placeholder="URL where you found this" style="display:none">
                 </td>
-                <td><span class="conf-badge"><span class="badge badge-{{ field.confidence_label }}">{{ field.confidence_display }}</span></span></td>
+                <td>
+                    <span class="conf-badge">
+                        {% if field.pre_accepted %}
+                            <span class="badge badge-accepted">✓ Accepted</span>
+                        {% elif field.pre_auto_reviewed %}
+                            <span class="badge badge-auto">⚙ Auto</span>
+                        {% else %}
+                            <span class="badge badge-{{ field.confidence_label }}">{{ field.confidence_display }}</span>
+                        {% endif %}
+                    </span>
+                </td>
                 <td class="row-actions">
                     <!-- Default state -->
                     <button type="button" class="row-btn btn-accept accept-btn">Accept</button>
@@ -292,11 +634,29 @@
 </div>
 {% endfor %}
 
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% if current_page > 0 %}
+    <a class="btn-page" href="/update/{{ item.name }}?page={{ current_page - 1 }}">← Previous</a>
+    {% else %}
+    <span class="btn-page disabled">← Previous</span>
+    {% endif %}
+
+    <span class="page-info">Page {{ current_page + 1 }} of {{ total_pages }}</span>
+
+    {% if current_page + 1 < total_pages %}
+    <a class="btn-page" href="/update/{{ item.name }}?page={{ current_page + 1 }}">Next →</a>
+    {% else %}
+    <span class="btn-page disabled">Next →</span>
+    {% endif %}
+</div>
+{% endif %}
+
 <!-- Full JSON editor -->
 <div class="full-json-section">
     <h4>Full Croissant Metadata (JSON)</h4>
     <form action="/update/{{ item.name }}" method="POST">
-        <textarea name="croissant_metadata">{{ item.croissant_metadata | json_encode(pretty=true) | safe }}</textarea>
+        <textarea name="croissant_metadata">{{ item.croissant_metadata | json_encode(pretty=true) }}</textarea>
         <div class="button-group">
             <a href="/" class="btn-cancel-link">Cancel</a>
             <button type="submit" class="btn btn-update">Save Full JSON</button>
@@ -305,39 +665,74 @@
 </div>
 
 <script>
-var totalFields = {{ total_fields }};
-var pendingEdits = {};      // path → {path, value, source_url, original_value} — only actual changes
-var reviewedPaths = new Set();  // all paths marked accepted or edited
+function toggleSchema() {
+    var body = document.getElementById('schema-body');
+    var icon = document.getElementById('schema-icon');
+    var open = body.style.display === 'block';
+    body.style.display = open ? 'none' : 'block';
+    icon.classList.toggle('open', !open);
+}
+
+// Total fields across ALL pages; already-reviewed count from DB (all pages).
+var totalAllFields = {{ total_fields }};
+var dbReviewedCount = {{ total_reviewed_db }};
+var pendingEdits = {};                // path → {path, value, url}
+var reviewedPaths = new Set();        // accepted or edited this session (current page)
+var preAcceptedPaths = new Set();     // human-accepted in a prior session
+var preAutoReviewedPaths = new Set(); // auto-verified in a prior session
 
 function updateProgress() {
     var edited = Object.keys(pendingEdits).length;
-    var accepted = reviewedPaths.size - edited;
-    var remaining = totalFields - reviewedPaths.size;
 
-    document.getElementById('count-accepted').textContent = accepted;
+    // Count paths reviewed this session that weren't already in the DB.
+    // Avoid double-counting fields that were pre-accepted or pre-auto-reviewed.
+    var newThisSession = 0;
+    reviewedPaths.forEach(function(p) {
+        if (!preAcceptedPaths.has(p) && !preAutoReviewedPaths.has(p)) newThisSession++;
+    });
+
+    var totalReviewed = dbReviewedCount + newThisSession;
+    var remaining = Math.max(0, totalAllFields - totalReviewed);
+    var reviewedPct = totalAllFields > 0 ? Math.round(totalReviewed / totalAllFields * 100) : 0;
+    var remainingPct = Math.max(0, 100 - reviewedPct);
+
+    document.getElementById('count-accepted').textContent =
+        totalReviewed + ' (' + reviewedPct + '%)';
     document.getElementById('count-edited').textContent = edited;
-    document.getElementById('count-remaining').textContent = remaining;
+    document.getElementById('count-remaining').textContent =
+        remaining + ' (' + remainingPct + '%)';
 
-    document.getElementById('save-btn').disabled = (edited === 0);
-
-    var exportBtn = document.getElementById('export-btn');
-    if (remaining === 0) {
-        exportBtn.classList.remove('btn-disabled');
-    } else {
-        exportBtn.classList.add('btn-disabled');
-    }
+    var hasUnsaved = reviewedPaths.size > 0 || edited > 0;
+    document.getElementById('save-btn').disabled = !hasUnsaved;
 }
 
+// Restore human-accepted fields from DB
+document.querySelectorAll('tr[data-pre-accepted="true"]').forEach(function(row) {
+    preAcceptedPaths.add(row.dataset.path);
+    markAccepted(row);
+});
+
+// Restore auto-reviewed fields (skip those already human-accepted)
+document.querySelectorAll('tr[data-pre-auto-reviewed="true"]').forEach(function(row) {
+    var path = row.dataset.path;
+    if (!preAcceptedPaths.has(path)) {
+        preAutoReviewedPaths.add(path);
+        row.classList.add('row-auto');
+    }
+});
+
+updateProgress();
+
 function markAccepted(row) {
-    row.classList.remove('row-edited');
-    row.classList.add('row-accepted');
+    row.classList.remove('row-edited', 'row-auto');
+    row.classList.add('row-accepted');  // row-flagged stays if present; CSS gives accepted precedence
     row.dataset.state = 'accepted';
     row.querySelector('.conf-badge').innerHTML =
         '<span class="badge badge-accepted">✓ Accepted</span>';
 }
 
 function markEdited(row, newValue, newSource) {
-    row.classList.remove('row-accepted');
+    row.classList.remove('row-accepted', 'row-auto');
     row.classList.add('row-edited');
     row.dataset.state = 'edited';
     row.dataset.currentValue = newValue;
@@ -348,11 +743,19 @@ function markEdited(row, newValue, newSource) {
     valDisplay.title = newValue;
 
     var srcDisplay = row.querySelector('.src-display');
+    srcDisplay.innerHTML = '';
     if (newSource) {
-        srcDisplay.innerHTML =
-            '<a href="' + newSource + '" target="_blank" title="' + newSource + '">' + newSource + '</a>';
+        var a = document.createElement('a');
+        a.href = newSource;
+        a.target = '_blank';
+        a.title = newSource;
+        a.textContent = newSource;
+        srcDisplay.appendChild(a);
     } else {
-        srcDisplay.innerHTML = '<span class="no-source">—</span>';
+        var noSrc = document.createElement('span');
+        noSrc.className = 'no-source';
+        noSrc.textContent = '—';
+        srcDisplay.appendChild(noSrc);
     }
 
     row.querySelector('.conf-badge').innerHTML =
@@ -363,6 +766,7 @@ function enterEditMode(row) {
     row.querySelector('.val-input').value = row.dataset.currentValue;
     row.querySelector('.src-input').value = row.dataset.currentSource;
 
+    row.querySelector('.val-display').classList.remove('expanded');
     row.querySelector('.val-display').style.display = 'none';
     row.querySelector('.val-input').style.display = 'block';
     row.querySelector('.src-display').style.display = 'none';
@@ -385,7 +789,14 @@ function exitEditMode(row) {
     row.querySelector('.cancel-btn').style.display = 'none';
 }
 
-// Quick Accept (no editing needed)
+// Expand/collapse value on click
+document.querySelectorAll('.val-display').forEach(function(el) {
+    el.addEventListener('click', function() {
+        this.classList.toggle('expanded');
+    });
+});
+
+// Quick Accept
 document.querySelectorAll('.accept-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
         var row = this.closest('tr');
@@ -414,11 +825,9 @@ document.querySelectorAll('.confirm-btn').forEach(function(btn) {
         var origValue = row.dataset.origValue;
         var origSource = row.dataset.origSource;
 
-        var valueChanged = (newValue !== origValue) || (newSource !== origSource);
-
         reviewedPaths.add(path);
 
-        if (valueChanged) {
+        if ((newValue !== origValue) || (newSource !== origSource)) {
             pendingEdits[path] = {
                 path: path,
                 value: newValue,
@@ -427,7 +836,6 @@ document.querySelectorAll('.confirm-btn').forEach(function(btn) {
             };
             markEdited(row, newValue, newSource);
         } else {
-            // Nothing changed — treat as accepted
             delete pendingEdits[path];
             markAccepted(row);
         }
@@ -437,19 +845,203 @@ document.querySelectorAll('.confirm-btn').forEach(function(btn) {
     });
 });
 
-// Cancel edit — exit without changing review state
+// Cancel edit
 document.querySelectorAll('.cancel-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
         exitEditMode(this.closest('tr'));
     });
 });
 
-// On save: submit only actual edits
+// On save: submit edits + newly accepted paths
 document.getElementById('changes-form').addEventListener('submit', function(e) {
     var edits = Object.values(pendingEdits);
-    if (edits.length === 0) { e.preventDefault(); return; }
+    var newAccepts = [];
+    reviewedPaths.forEach(function(path) {
+        if (!pendingEdits[path]) newAccepts.push(path);
+    });
+    if (edits.length === 0 && newAccepts.length === 0) { e.preventDefault(); return; }
     document.getElementById('fields-json-input').value = JSON.stringify(edits);
+    document.getElementById('accepted-json-input').value = JSON.stringify(newAccepts);
 });
+
+// Stamp export filename with current datetime on click
+document.getElementById('export-btn').addEventListener('click', function() {
+    var d = new Date();
+    var ts = d.getFullYear().toString() +
+        ('0' + (d.getMonth() + 1)).slice(-2) +
+        ('0' + d.getDate()).slice(-2) + '_' +
+        ('0' + d.getHours()).slice(-2) +
+        ('0' + d.getMinutes()).slice(-2) +
+        ('0' + d.getSeconds()).slice(-2);
+    this.download = '{{ item.name }}_' + ts + '.json';
+});
+
+// ── Suggested fixes ──────────────────────────────────────────────────────────
+(function loadFixSuggestions() {
+    var kbName = '{{ item.name | safe }}';
+    fetch('/suggest_fixes/' + encodeURIComponent(kbName))
+        .then(function(r) { return r.json(); })
+        .then(function(suggestions) { renderSuggestions(kbName, suggestions); })
+        .catch(function() { /* suggestions are optional; silence errors */ });
+})();
+
+function renderSuggestions(kbName, suggestions) {
+    if (!suggestions || !suggestions.length) return;
+    var panel = document.getElementById('fix-suggestions-panel');
+    var html = '<div class="fix-panel-header">'
+        + 'Suggested Fixes'
+        + '<span class="fix-panel-count">' + suggestions.length + '</span>'
+        + '<span style="font-size:11px;font-weight:normal;opacity:0.8;margin-left:auto">'
+        + 'Changes apply to the metadata JSON and require your approval</span>'
+        + '</div>';
+    suggestions.forEach(function(s, si) {
+        var sev = s.severity === 'error' ? 'badge-error' : 'badge-warning';
+        var sevLabel = s.severity === 'error' ? 'Error' : 'Warning';
+        var previewJson = typeof s.preview === 'object'
+            ? JSON.stringify(s.preview, null, 2)
+            : (Array.isArray(s.preview) ? s.preview.map(function(p) { return JSON.stringify(p); }).join('\n') : String(s.preview));
+
+        var paramsHtml = '';
+        if (s.editable_fields && s.editable_fields.length) {
+            paramsHtml = '<div class="fix-params">';
+            s.editable_fields.forEach(function(f) {
+                var val = (s.params && s.params[f.key]) ? s.params[f.key] : '';
+                paramsHtml += '<div class="fix-param-row">'
+                    + '<div class="fix-param-label">' + escHtml(f.label) + '</div>'
+                    + '<div style="flex:1">'
+                    + '<input class="fix-param-input" data-key="' + escHtml(f.key) + '" data-si="' + si + '" value="' + escHtml(val) + '" placeholder="' + escHtml(f.hint || '') + '">'
+                    + (f.hint ? '<div class="fix-param-hint">' + escHtml(f.hint) + '</div>' : '')
+                    + '</div></div>';
+            });
+            paramsHtml += '</div>';
+        }
+
+        html += '<div class="fix-card" id="fix-card-' + si + '">'
+            + '<div class="fix-card-title">'
+            + '<span class="badge-sev ' + sev + '">' + sevLabel + '</span>'
+            + escHtml(s.title)
+            + '</div>'
+            + '<div class="fix-card-desc">' + escHtml(s.description) + '</div>'
+            + '<button class="fix-toggle-preview" onclick="toggleFixPreview(this)">Show preview ▸</button>'
+            + '<div class="fix-preview" style="display:none">' + escHtml(previewJson) + '</div>'
+            + paramsHtml
+            + '<div class="fix-actions">'
+            + '<button class="btn-fix-apply" onclick="applyFix(this,' + si + ',\'' + escHtml(kbName) + '\')" data-si="' + si + '">'
+            + 'Apply Fix</button>'
+            + '<button class="btn-fix-dismiss" onclick="dismissFix(' + si + ')">Dismiss</button>'
+            + '<span class="fix-status" id="fix-status-' + si + '"></span>'
+            + '</div></div>';
+    });
+    panel.innerHTML = html;
+    panel.style.display = '';
+    // Store suggestions for use by applyFix
+    panel._suggestions = suggestions;
+}
+
+function toggleFixPreview(btn) {
+    var preview = btn.nextElementSibling;
+    var open = preview.style.display !== 'none';
+    preview.style.display = open ? 'none' : 'block';
+    btn.textContent = open ? 'Show preview ▸' : 'Hide preview ▾';
+}
+
+function dismissFix(si) {
+    var card = document.getElementById('fix-card-' + si);
+    if (card) {
+        card.style.opacity = '0.4';
+        card.style.pointerEvents = 'none';
+        card.querySelector('.fix-actions').innerHTML = '<span style="color:#888;font-size:12px">Dismissed — will reappear after re-validation if not fixed</span>';
+    }
+}
+
+function applyFix(btn, si, kbName) {
+    var panel = document.getElementById('fix-suggestions-panel');
+    var suggestion = panel._suggestions[si];
+    if (!suggestion) return;
+
+    // Collect any editable param values from inputs
+    var params = Object.assign({}, suggestion.params || {});
+    var inputs = document.querySelectorAll('[data-si="' + si + '"]');
+    inputs.forEach(function(inp) { params[inp.dataset.key] = inp.value.trim(); });
+
+    // Validate required params
+    if (suggestion.editable_fields && suggestion.editable_fields.length) {
+        for (var i = 0; i < suggestion.editable_fields.length; i++) {
+            var fld = suggestion.editable_fields[i];
+            if (!params[fld.key]) {
+                document.getElementById('fix-status-' + si).innerHTML =
+                    '<span class="fix-status-err">Please fill in: ' + escHtml(fld.label) + '</span>';
+                return;
+            }
+        }
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Applying…';
+    document.getElementById('fix-status-' + si).innerHTML = '';
+
+    fetch('/apply_fix/' + encodeURIComponent(kbName), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fix_type: suggestion.fix_type, params: params }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) {
+            btn.disabled = false;
+            btn.textContent = 'Apply Fix';
+            document.getElementById('fix-status-' + si).innerHTML =
+                '<span class="fix-status-err">' + escHtml(data.error) + '</span>';
+        } else {
+            var card = document.getElementById('fix-card-' + si);
+            card.querySelector('.fix-actions').innerHTML =
+                '<span class="fix-status-ok">✓ Applied — metadata updated</span>';
+            card.style.opacity = '0.7';
+            // Reload suggestions after a short delay so counts update
+            setTimeout(function() {
+                fetch('/suggest_fixes/' + encodeURIComponent(kbName))
+                    .then(function(r) { return r.json(); })
+                    .then(function(s) { renderSuggestions(kbName, s); });
+            }, 800);
+        }
+    })
+    .catch(function() {
+        btn.disabled = false;
+        btn.textContent = 'Apply Fix';
+        document.getElementById('fix-status-' + si).innerHTML =
+            '<span class="fix-status-err">Request failed</span>';
+    });
+}
+
+function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Auto-validation: POST /validate/<name>, then reload to show results
+function runValidation(name) {
+    var btn = document.getElementById('validate-btn');
+    btn.disabled = true;
+    btn.textContent = 'Validating…';
+    fetch('/validate/' + name, { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var msg = 'Auto-verified ' + data.auto_reviewed + ' fields.';
+            if (data.failed_urls && data.failed_urls.length > 0) {
+                msg += '\n\nUnreachable URLs (' + data.failed_urls.length + '):\n' +
+                    data.failed_urls.slice(0, 5).join('\n');
+                if (data.failed_urls.length > 5) {
+                    msg += '\n… and ' + (data.failed_urls.length - 5) + ' more';
+                }
+            }
+            alert(msg + '\n\nReloading to show results…');
+            location.reload();
+        })
+        .catch(function() {
+            btn.disabled = false;
+            btn.textContent = '⚙ Run Auto-Validation';
+            alert('Validation request failed. Check the server logs.');
+        });
+}
 </script>
 
 {% endblock content %}
