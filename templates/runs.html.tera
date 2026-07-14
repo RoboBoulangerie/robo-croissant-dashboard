@@ -1,0 +1,191 @@
+{% extends "base" %}
+
+{% block content %}
+<style>
+    .runs-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 18px;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .import-hint {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        padding: 12px 16px;
+        font-size: 12px;
+        color: #555;
+        margin-bottom: 20px;
+        font-family: 'Courier New', monospace;
+    }
+    .import-hint strong { font-family: sans-serif; font-size: 13px; color: #333; }
+    .runs-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+        overflow: hidden;
+    }
+    .runs-table th {
+        background: #495057;
+        color: white;
+        padding: 10px 14px;
+        text-align: left;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        white-space: nowrap;
+    }
+    .runs-table td {
+        padding: 10px 14px;
+        border-bottom: 1px solid #f0f0f0;
+        font-size: 13px;
+        vertical-align: middle;
+    }
+    .runs-table tr:last-child td { border-bottom: none; }
+    .runs-table tr:hover td { background: #f8f9fa; }
+    .hash-chip {
+        font-family: 'Courier New', monospace;
+        font-size: 11px;
+        background: #e9ecef;
+        padding: 2px 6px;
+        border-radius: 4px;
+        color: #555;
+    }
+    .edit-form { display: none; }
+    .edit-form.open { display: table-row; }
+    .edit-row td {
+        background: #f0f4ff;
+        padding: 10px 14px;
+    }
+    .edit-row input[type=text] {
+        padding: 5px 8px;
+        border: 1px solid #007bff;
+        border-radius: 4px;
+        font-size: 13px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .btn-sm {
+        padding: 4px 10px;
+        font-size: 12px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+    .btn-edit-run { background: #6c757d; color: white; }
+    .btn-edit-run:hover { background: #5a6268; }
+    .btn-save-run { background: #007bff; color: white; }
+    .btn-save-run:hover { background: #0069d9; }
+    .btn-cancel-edit { background: #dc3545; color: white; margin-left: 4px; }
+    .btn-cancel-edit:hover { background: #c82333; }
+    .compare-link {
+        font-size: 12px;
+        color: #007bff;
+        text-decoration: none;
+    }
+    .compare-link:hover { text-decoration: underline; }
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #888;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+    }
+    .empty-state h4 { color: #555; margin-bottom: 8px; }
+    .empty-state code {
+        background: #f8f9fa;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+    }
+</style>
+
+<div class="runs-header">
+    <h3 style="margin:0">Pipeline Runs</h3>
+    <span style="font-size:12px;color:#888">{{ runs | length }} run{% if runs | length != 1 %}s{% endif %} imported</span>
+</div>
+
+<div class="import-hint">
+    <strong>Import a run:</strong><br>
+    python3 scripts/import_run.py /path/to/2026_0617/robo_croissant.db<br>
+    python3 scripts/import_run.py /path/to/2026_0507/ &nbsp;&nbsp;<span style="color:#aaa"># directory of JSON files</span>
+</div>
+
+{% if runs | length == 0 %}
+<div class="empty-state">
+    <h4>No runs imported yet</h4>
+    <p>Run the import script to load pipeline output for comparison:</p>
+    <p style="margin-top:8px"><code>python3 scripts/import_run.py /path/to/robo_croissant.db</code></p>
+</div>
+{% else %}
+<table class="runs-table">
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>Label</th>
+            <th>Date</th>
+            <th>Model</th>
+            <th>KBs</th>
+            <th>Fields</th>
+            <th>Hash</th>
+            <th>Imported</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for run in runs %}
+        <tr id="run-row-{{ run.id }}">
+            <td style="color:#aaa;font-size:11px">{{ run.id }}</td>
+            <td><strong>{{ run.label }}</strong></td>
+            <td style="color:#666;font-size:12px;white-space:nowrap">{{ run.run_date | default(value="—") }}</td>
+            <td style="color:#555;font-size:12px">{{ run.model | default(value="—") }}</td>
+            <td style="text-align:right;font-weight:bold">{{ run.kb_count }}</td>
+            <td style="text-align:right;color:#555">{{ run.field_count }}</td>
+            <td><span class="hash-chip">{{ run.file_hash }}</span></td>
+            <td style="color:#aaa;font-size:11px;white-space:nowrap">{{ run.imported_at | truncate(length=10) }}</td>
+            <td style="white-space:nowrap">
+                <button class="btn-sm btn-edit-run" onclick="toggleEdit({{ run.id }})">Edit</button>
+            </td>
+        </tr>
+        <tr class="edit-form edit-row" id="edit-form-{{ run.id }}">
+            <td colspan="9">
+                <form action="/runs/{{ run.id }}" method="POST"
+                      style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+                    <div style="flex:2;min-width:200px">
+                        <label style="font-size:11px;color:#666;display:block;margin-bottom:3px">Label</label>
+                        <input type="text" name="label" value="{{ run.label }}">
+                    </div>
+                    <div style="flex:2;min-width:180px">
+                        <label style="font-size:11px;color:#666;display:block;margin-bottom:3px">Model</label>
+                        <input type="text" name="model" value="{{ run.model | default(value='') }}"
+                               placeholder="e.g. Azure GPT-5.4 high-effort">
+                    </div>
+                    <div style="display:flex;gap:6px;padding-bottom:1px">
+                        <button type="submit" class="btn-sm btn-save-run">Save</button>
+                        <button type="button" class="btn-sm btn-cancel-edit"
+                                onclick="toggleEdit({{ run.id }})">Cancel</button>
+                    </div>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+<script>
+function toggleEdit(id) {
+    var row = document.getElementById('run-row-' + id);
+    var form = document.getElementById('edit-form-' + id);
+    var open = form.classList.contains('open');
+    form.classList.toggle('open', !open);
+    row.style.opacity = open ? '' : '0.5';
+}
+</script>
+{% endblock content %}

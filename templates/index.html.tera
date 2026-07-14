@@ -1,19 +1,100 @@
 {% extends "base" %}
 
 {% block content %}
-<h3>Robo Croissant Metadata instances</h3>
+<style>
+    .run-only-badge {
+        display: inline-block;
+        background: #e9ecef;
+        color: #6c757d;
+        font-size: 10px;
+        font-weight: bold;
+        padding: 1px 6px;
+        border-radius: 3px;
+        margin-left: 5px;
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+    .run-source {
+        display: block;
+        font-size: 11px;
+        color: #aaa;
+        margin-top: 2px;
+    }
+    .btn-disabled {
+        opacity: 0.35;
+        pointer-events: none;
+        cursor: default;
+    }
+    .btn-compare {
+        background: #6f42c1;
+        color: white;
+        padding: 5px 12px;
+        border-radius: 4px;
+        font-size: 12px;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+    .btn-compare:hover { background: #5a32a3; }
+    .progress-bar-wrap {
+        background: #e9ecef;
+        border-radius: 4px;
+        height: 8px;
+        width: 100px;
+        display: inline-block;
+        vertical-align: middle;
+        overflow: hidden;
+    }
+    .progress-bar-fill {
+        height: 100%;
+        border-radius: 4px;
+        background: #28a745;
+        transition: width 0.2s;
+    }
+    .pct-label {
+        font-size: 11px;
+        color: #555;
+        margin-left: 5px;
+        vertical-align: middle;
+    }
+    .issue-badge {
+        display: inline-block;
+        padding: 2px 7px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: bold;
+        white-space: nowrap;
+    }
+    .issue-badge-error   { background: #f8d7da; color: #721c24; }
+    .issue-badge-warning { background: #fff3cd; color: #856404; }
+    .issue-badge-clean   { background: #d4edda; color: #155724; }
+    .issue-badge-none    { color: #bbb; font-size: 11px; }
+    th.col-progress { width: 140px; }
+    th.col-issues   { width: 110px; }
+</style>
+
+<h3>Croissant Metadata Review</h3>
 <table>
     <thead>
     <tr>
         <th>Name</th>
         <th>URL</th>
+        <th class="col-progress">Review Progress</th>
+        <th class="col-issues">Issues</th>
         <th class="actions">Actions</th>
     </tr>
     </thead>
     <tbody>
     {% for s in items %}
     <tr>
-        <td>{{ s.name }}</td>
+        <td>
+            {{ s.name }}
+            {% if not s.in_working_db %}
+            <span class="run-only-badge">run only</span>
+            {% if s.latest_run_label %}
+            <span class="run-source">from: {{ s.latest_run_label }}{% if s.latest_run_date %} · {{ s.latest_run_date }}{% endif %}</span>
+            {% endif %}
+            {% endif %}
+        </td>
         <td>
             {% if s.url %}
             <a href="{{ s.url }}" target="_blank">{{ s.url }}</a>
@@ -21,17 +102,70 @@
             —
             {% endif %}
         </td>
+        <td>
+            {% if s.in_working_db and s.total_fields > 0 %}
+            <div class="progress-bar-wrap" title="{{ s.reviewed_fields }}/{{ s.total_fields }} reviewed">
+                <div class="progress-bar-fill" style="width:{{ s.pct_reviewed }}%"></div>
+            </div>
+            <span class="pct-label">{{ s.pct_reviewed }}%</span>
+            {% elif s.in_working_db %}
+            <span class="pct-label" style="color:#bbb">no fields</span>
+            {% else %}
+            —
+            {% endif %}
+        </td>
+        <td>
+            {% if s.in_working_db %}
+                {% if s.error_count > 0 %}
+                <a href="/issues" class="issue-badge issue-badge-error">{{ s.total_issues }} issues</a>
+                {% elif s.total_issues > 0 %}
+                <a href="/issues" class="issue-badge issue-badge-warning">{{ s.total_issues }} warnings</a>
+                {% elif s.has_been_validated %}
+                <span class="issue-badge issue-badge-clean">✓ clean</span>
+                {% else %}
+                <span class="issue-badge issue-badge-none">not validated</span>
+                {% endif %}
+            {% else %}
+            —
+            {% endif %}
+        </td>
         <td class="actions">
-            <form action="https://search.google.com/test/rich-results?utm_campaign=devsite&utm_medium=jsonld&utm_source=dataset" method="POST" target="_blank"
-                  style="display:inline;">
-                <textarea style="display:none" name="code_snippet">{{ s.croissant_metadata | json_encode(pretty=true) | safe }}</textarea>
-                <button type="submit" class="btn btn-validate">Validate</button>
-            </form>
-            <a href="/update/{{ s.name }}" class="btn btn-update">Update</a>
+            {% if s.in_working_db %}
+            <button type="button" class="btn btn-validate" onclick="validateEntry(this, '{{ s.name }}')">Schema.org Test ↗</button>
+            <a href="/update/{{ s.name }}" class="btn btn-update">Review Fields</a>
             <a href="/knowledge_base/{{ s.name }}" class="btn btn-download" download="{{ s.name }}.json">Download</a>
+            {% endif %}
+            <a href="/compare/{{ s.name | urlencode }}" class="btn-compare">Compare Runs</a>
         </td>
     </tr>
     {% endfor %}
     </tbody>
 </table>
+<script>
+function validateEntry(btn, name) {
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+    fetch('/knowledge_base/' + encodeURIComponent(name))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var form = document.createElement('form');
+            form.method = 'POST';
+            form.action = 'https://search.google.com/test/rich-results?utm_campaign=devsite&utm_medium=jsonld&utm_source=dataset';
+            form.target = '_blank';
+            var textarea = document.createElement('textarea');
+            textarea.name = 'code_snippet';
+            textarea.value = JSON.stringify(data, null, 2);
+            form.appendChild(textarea);
+            document.body.appendChild(form);
+            form.submit();
+            document.body.removeChild(form);
+        })
+        .catch(function() { alert('Failed to load metadata for ' + name); })
+        .finally(function() {
+            btn.disabled = false;
+            btn.textContent = 'Schema.org Test ↗';
+        });
+}
+</script>
+
 {% endblock content %}
