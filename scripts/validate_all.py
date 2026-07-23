@@ -885,6 +885,28 @@ def _tabular_compressed_inner(url: str) -> str:
     return ""
 _REQUIRED_TOP_LEVEL = ["name", "description", "url", "license", "conformsTo"]
 
+# encodingFormat values with well-defined columns — a FileObject in one of
+# these formats should be sourced by some RecordSet field, unless it's empty.
+_TABULAR_ENCODING_FORMATS = {
+    "text/csv",
+    "text/tab-separated-values",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/parquet",
+    "application/jsonlines",
+    "application/x-ndjson",
+}
+
+
+def _content_size_bytes(size_str) -> int | None:
+    """Parse a contentSize string like '52498 B' into an int, or None if unparseable."""
+    if not size_str:
+        return None
+    try:
+        return int(str(size_str).strip().split()[0])
+    except (ValueError, IndexError):
+        return None
+
 
 def flag_structural_issues(metadata_json: str) -> list[dict]:
     """Detect spec violations that require reading the full metadata JSON."""
@@ -1008,6 +1030,45 @@ def flag_structural_issues(metadata_json: str) -> list[dict]:
     # Note: recordSets with identical field schemas are NOT flagged.
     # Croissant 1.1 has no schema inheritance, so separate recordSets for
     # semantically distinct datasets that share column structure is correct.
+
+    # ── 4. Tabular-format files with no RecordSet coverage ───────────────────
+    covered_ids: set[str] = set()
+    for rs in record_sets:
+        if not isinstance(rs, dict):
+            continue
+        for f in rs.get("field", []):
+            if not isinstance(f, dict):
+                continue
+            src = f.get("source", {})
+            if not isinstance(src, dict):
+                continue
+            fo, fs = src.get("fileObject"), src.get("fileSet")
+            if isinstance(fo, dict) and fo.get("@id"):
+                covered_ids.add(fo["@id"])
+            if isinstance(fs, dict) and fs.get("@id"):
+                covered_ids.add(fs["@id"])
+
+    for idx, d in enumerate(dists):
+        if not isinstance(d, dict) or d.get("@type") != "cr:FileObject":
+            continue
+        did = d.get("@id", f"distribution[{idx}]")
+        if did in covered_ids:
+            continue
+        fmt = d.get("encodingFormat", "")
+        if fmt not in _TABULAR_ENCODING_FORMATS:
+            continue
+        if _content_size_bytes(d.get("contentSize")) == 0:
+            continue  # empty file — nothing to extract a schema from
+        issues.append({
+            "path":       f"distribution[{idx}]",
+            "value":      d.get("name", did),
+            "issue_type": "tabular_file_missing_recordset",
+            "detail": (
+                f"'{d.get('name', did)}' has a tabular encodingFormat ({fmt}) "
+                f"but no RecordSet field sources from it. This file's columns "
+                f"are undocumented."
+            ),
+        })
 
     return issues
 
