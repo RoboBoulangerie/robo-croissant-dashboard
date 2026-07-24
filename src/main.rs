@@ -1074,6 +1074,7 @@ fn issue_type_meta(issue_type: &str) -> (&'static str, &'static str) {
         "inline_data_rows"            => ("Inline data rows (use examples)",  "warning"),
         "zip_without_inner_file"      => ("Archive missing inner file",       "warning"),
         "tabular_file_missing_recordset" => ("Tabular file missing RecordSet", "warning"),
+        "provenance_noncompliant"     => ("Non-compliant dct:provenance",     "warning"),
         "license_is_terms_page"       => ("License URL is a terms page",      "warning"),
         "invalid_checksum_format"     => ("Invalid checksum format",          "warning"),
         "url_unreachable"             => ("URL unreachable",                  "info"),

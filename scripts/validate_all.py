@@ -1070,6 +1070,34 @@ def flag_structural_issues(metadata_json: str) -> list[dict]:
             ),
         })
 
+    # ── 5. dct:provenance present as a top-level key ──────────────────────────
+    # Croissant 1.1 has no top-level 'dct:provenance' property — provenance is
+    # expressed via top-level 'prov:*' properties (prov:wasGeneratedBy, etc.).
+    # A single dct:provenance blob is non-compliant regardless of its content,
+    # and doubly so when that content isn't even parseable as JSON.
+    if "dct:provenance" in metadata:
+        prov = metadata["dct:provenance"]
+        prov_str = prov if isinstance(prov, str) else json.dumps(prov)
+        try:
+            json.loads(prov_str)
+            parses = True
+        except Exception:
+            parses = False
+        detail = (
+            "Top-level 'dct:provenance' is not valid Croissant 1.1 — provenance "
+            "must be expressed as top-level 'prov:*' properties "
+            "(e.g. prov:wasGeneratedBy, prov:wasDerivedFrom), not a single "
+            "dct:provenance blob."
+        )
+        if not parses:
+            detail += " Its value is also not valid parseable JSON."
+        issues.append({
+            "path":       "dct:provenance",
+            "value":      str(prov)[:200],
+            "issue_type": "provenance_noncompliant",
+            "detail":     detail,
+        })
+
     return issues
 
 
