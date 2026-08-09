@@ -1,0 +1,375 @@
+{% extends "base" %}
+
+{% block content %}
+<style>
+    .reconcile-header { margin-bottom: 18px; }
+    .compare-stats {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 18px;
+        flex-wrap: wrap;
+    }
+    .cstat {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+        padding: 10px 18px;
+        font-size: 13px;
+    }
+    .cstat strong { font-size: 22px; display: block; color: #333; }
+    .empty-state {
+        text-align: center; padding: 60px 20px; color: #888;
+        background: #fff; border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+    }
+    .issue-banner {
+        background: #fff3cd;
+        border: 1px solid #ffe08a;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 18px;
+        font-size: 13px;
+    }
+    .issue-banner h4 { margin: 0 0 8px 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: #856404; }
+    .issue-banner ul { margin: 0; padding-left: 18px; }
+    .issue-banner li { margin-bottom: 4px; }
+    .dist-toggle {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+        padding: 14px 18px;
+        margin-bottom: 18px;
+    }
+    .dist-toggle h4 { margin: 0 0 10px 0; font-size: 13px; color: #333; }
+    .dist-toggle label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-right: 20px;
+        font-size: 13px;
+        cursor: pointer;
+    }
+    .reconcile-table-wrap {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+        overflow-x: auto;
+        margin-bottom: 20px;
+    }
+    .reconcile-table { width: 100%; border-collapse: collapse; min-width: 900px; }
+    .reconcile-table th {
+        background: #495057;
+        color: white;
+        padding: 8px 12px;
+        text-align: left;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        white-space: nowrap;
+    }
+    .reconcile-table td {
+        padding: 8px 12px;
+        border-bottom: 1px solid #f0f0f0;
+        font-size: 12px;
+        vertical-align: top;
+    }
+    .reconcile-table tr:last-child td { border-bottom: none; }
+    .path-col {
+        font-family: 'Courier New', monospace;
+        font-size: 11px;
+        color: #555;
+        white-space: nowrap;
+        width: 160px;
+    }
+    .val-col { max-width: 260px; word-break: break-word; font-size: 12px; cursor: pointer; }
+    .val-missing { color: #ccc; font-style: italic; font-size: 11px; }
+    .val-changed { background: #fff8e1; }
+    .val-added   { background: #e8f4ff; }
+    .val-removed { background: #fff0f0; }
+    .val-full    { display: none; white-space: pre-wrap; word-break: break-word; }
+    .resolution-col { width: 260px; }
+    .resolution-col label { display: block; font-size: 12px; margin-bottom: 3px; cursor: pointer; }
+    .btn-restructure {
+        display: block;
+        margin: 6px 0;
+        padding: 4px 10px;
+        font-size: 11px;
+        background: #6f42c1;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    .btn-restructure:hover { background: #5a32a3; }
+    .edit-textarea {
+        display: none;
+        width: 100%;
+        min-height: 70px;
+        font-family: 'Courier New', monospace;
+        font-size: 11px;
+        margin-top: 4px;
+        box-sizing: border-box;
+    }
+    .commit-bar {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-bottom: 40px;
+    }
+    .btn-commit {
+        padding: 10px 22px;
+        border-radius: 4px;
+        font-size: 14px;
+        background: #28a745;
+        color: white;
+        border: none;
+        cursor: pointer;
+    }
+    .btn-commit:hover { background: #218838; }
+    .btn-commit:disabled { background: #9fd6ac; cursor: default; }
+</style>
+
+<div class="reconcile-header">
+    <h3 style="margin-bottom:6px">Reconcile: {{ kb_name }}</h3>
+    <div style="font-size:13px;color:#888">Merge the staged export into the working copy, field by field</div>
+</div>
+
+{% if no_staged_version %}
+<div class="empty-state">
+    <h4>No staged version for {{ kb_name }}</h4>
+    <p style="margin-top:8px">Stage a newer export to reconcile against the working copy:</p>
+    <p style="margin-top:6px;font-family:monospace;font-size:13px">python3 scripts/stage_kb.py {{ kb_name }} /path/to/newer/robo_croissant.db</p>
+    <p style="margin-top:12px"><a href="/">← Back to Home</a></p>
+</div>
+{% else %}
+
+<div class="compare-stats">
+    <div class="cstat">
+        <strong>{{ source_label }}</strong>
+        Staged source
+    </div>
+    <div class="cstat">
+        <strong>{{ staged_at }}</strong>
+        Staged at
+    </div>
+    <div class="cstat">
+        <strong>{{ rows | length }}</strong>
+        Fields to resolve
+    </div>
+</div>
+
+{% if issue_banner | length > 0 %}
+<div class="issue-banner">
+    <h4>Structural issues in staged version ({{ issue_banner | length }}) — informational, not blocking</h4>
+    <ul>
+        {% for i in issue_banner %}
+        <li><strong>{{ i.label }}</strong> — {{ i.path }}: {{ i.detail }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<div class="dist-toggle">
+    <h4>distribution / recordSet</h4>
+    <label>
+        <input type="radio" name="dist-recordset-choice" value="current" {% if dist_recordset_default == "current" %}checked{% endif %}>
+        Keep current ({{ current_dist_count }} files / {{ current_rs_count }} recordSets)
+    </label>
+    <label>
+        <input type="radio" name="dist-recordset-choice" value="staged" {% if dist_recordset_default == "staged" %}checked{% endif %}>
+        Take staged ({{ staged_dist_count }} files / {{ staged_rs_count }} recordSets)
+    </label>
+    {% if not dist_recordset_differs %}
+    <div style="font-size:11px;color:#aaa;margin-top:6px">Identical on both sides.</div>
+    {% endif %}
+</div>
+
+{% if rows | length == 0 %}
+<div class="empty-state" style="padding:30px">
+    <h4>No top-level field differences</h4>
+    <p>Current and staged versions of <strong>{{ kb_name }}</strong> agree on every top-level field (aside from distribution/recordSet above).</p>
+</div>
+{% else %}
+
+<div class="reconcile-table-wrap">
+    <table class="reconcile-table" id="reconcile-tbl">
+        <thead>
+            <tr>
+                <th>Field</th>
+                <th>Current</th>
+                <th>Staged</th>
+                <th>Resolution</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            <tr data-key="{{ row.key }}" data-current-json="{{ row.current_json }}" data-staged-json="{{ row.staged_json }}">
+                <td class="path-col">{{ row.key }}</td>
+                <td class="val-col {% if not row.current_present %}val-removed{% else %}val-changed{% endif %}"
+                    {% if row.current_present %}onclick="toggleValExpand(this)"{% endif %}>
+                    {% if row.current_present %}
+                        <span class="val-short">{{ row.current_display | truncate(length=150) }}</span>
+                        <span class="val-full">{{ row.current_display }}</span>
+                    {% else %}
+                        <span class="val-missing">— not present</span>
+                    {% endif %}
+                </td>
+                <td class="val-col {% if not row.staged_present %}val-added{% else %}val-changed{% endif %}"
+                    {% if row.staged_present %}onclick="toggleValExpand(this)"{% endif %}>
+                    {% if row.staged_present %}
+                        <span class="val-short">{{ row.staged_display | truncate(length=150) }}</span>
+                        <span class="val-full">{{ row.staged_display }}</span>
+                    {% else %}
+                        <span class="val-missing">— not present</span>
+                    {% endif %}
+                </td>
+                <td class="resolution-col">
+                    <label><input type="radio" name="res-{{ row.key }}" value="current" {% if row.default_choice == "current" %}checked{% endif %} onchange="onResolutionChange(this)"> Keep current</label>
+                    <label><input type="radio" name="res-{{ row.key }}" value="staged" {% if row.default_choice == "staged" %}checked{% endif %} onchange="onResolutionChange(this)"> Take staged</label>
+                    <label><input type="radio" name="res-{{ row.key }}" value="edit" onchange="onResolutionChange(this)"> Edit</label>
+                    {% if row.is_provenance %}
+                    <input type="radio" name="res-{{ row.key }}" value="restructure" style="display:none">
+                    <button type="button" class="btn-restructure" onclick="restructureProvenance(this)">Restructure to Croissant 1.1</button>
+                    {% endif %}
+                    <textarea class="edit-textarea"></textarea>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="commit-bar">
+    <a href="/" class="btn-page" style="background:#6c757d;padding:10px 22px;border-radius:4px;color:white;text-decoration:none;">Cancel</a>
+    <button type="button" class="btn-commit" id="commit-btn" onclick="commitReconcile()">Commit merged version</button>
+</div>
+
+{% endif %}
+{% endif %}
+
+<script>
+function toggleValExpand(td) {
+    var s = td.querySelector('.val-short');
+    var f = td.querySelector('.val-full');
+    if (!s || !f) return;
+    var expanding = f.style.display !== 'block';
+    s.style.display = expanding ? 'none' : '';
+    f.style.display = expanding ? 'block' : 'none';
+    td.style.maxWidth = expanding ? 'none' : '';
+}
+
+// Prefer current's value; fall back to staged if current is absent/null —
+// editing a field that only exists on one side should start from that side.
+function preferredJsonForEdit(tr) {
+    return tr.dataset.currentJson !== 'null' ? tr.dataset.currentJson : tr.dataset.stagedJson;
+}
+
+function onResolutionChange(radio) {
+    var td = radio.closest('td');
+    var tr = radio.closest('tr');
+    var textarea = td.querySelector('.edit-textarea');
+    if (radio.value === 'edit') {
+        if (!textarea.value) textarea.value = preferredJsonForEdit(tr);
+        textarea.style.display = 'block';
+    } else if (radio.value !== 'restructure') {
+        textarea.style.display = 'none';
+    }
+}
+
+function restructureProvenance(btn) {
+    var td = btn.closest('td');
+    var tr = btn.closest('tr');
+    var current = null, staged = null;
+    try { current = JSON.parse(tr.dataset.currentJson); } catch (e) { /* leave null */ }
+    try { staged = JSON.parse(tr.dataset.stagedJson); } catch (e) { /* leave null */ }
+    // dct:provenance should hold plain prose. Prefer whichever side actually
+    // has a string — a non-string value there usually means that side is
+    // already malformed (e.g. a stray restructuring artifact), so don't
+    // propagate it as the new description.
+    var raw;
+    if (typeof current === 'string' && current) {
+        raw = current;
+    } else if (typeof staged === 'string' && staged) {
+        raw = staged;
+    } else {
+        raw = current != null ? current : staged;
+    }
+    if (raw == null) raw = '';
+    if (typeof raw !== 'string') raw = JSON.stringify(raw);
+    var restructured = {
+        "prov:wasGeneratedBy": {
+            "@type": "prov:Activity",
+            "description": raw
+        }
+    };
+    var textarea = td.querySelector('.edit-textarea');
+    textarea.value = JSON.stringify(restructured, null, 2);
+    textarea.style.display = 'block';
+    td.querySelector('input[value="restructure"]').checked = true;
+}
+
+function gatherFieldResolutions() {
+    var resolutions = {};
+    var rows = document.querySelectorAll('#reconcile-tbl tbody tr[data-key]');
+    for (var i = 0; i < rows.length; i++) {
+        var tr = rows[i];
+        var key = tr.dataset.key;
+        var checked = tr.querySelector('input[type=radio]:checked');
+        if (!checked) continue;
+        var source = checked.value;
+        if (source === 'edit' || source === 'restructure') {
+            var raw = tr.querySelector('.edit-textarea').value;
+            var value;
+            try {
+                value = JSON.parse(raw);
+            } catch (e) {
+                throw new Error('Invalid JSON for field "' + key + '": ' + e.message);
+            }
+            resolutions[key] = { source: source, value: value };
+        } else {
+            resolutions[key] = { source: source };
+        }
+    }
+    return resolutions;
+}
+
+function commitReconcile() {
+    var resolutions;
+    try {
+        resolutions = gatherFieldResolutions();
+    } catch (e) {
+        alert(e.message);
+        return;
+    }
+    var distChoiceEl = document.querySelector('input[name="dist-recordset-choice"]:checked');
+    var distChoice = distChoiceEl ? distChoiceEl.value : 'current';
+
+    var btn = document.getElementById('commit-btn');
+    btn.disabled = true;
+    btn.textContent = 'Committing…';
+
+    fetch('/reconcile/{{ kb_name | urlencode }}/commit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field_resolutions: resolutions, dist_recordset_choice: distChoice })
+    })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (data.error) {
+                alert('Error: ' + data.error);
+                btn.disabled = false;
+                btn.textContent = 'Commit merged version';
+                return;
+            }
+            alert(data.next_steps || 'Committed.');
+            window.location.href = '/update/{{ kb_name | urlencode }}';
+        })
+        .catch(function (e) {
+            alert('Commit failed: ' + e);
+            btn.disabled = false;
+            btn.textContent = 'Commit merged version';
+        });
+}
+</script>
+
+{% endblock content %}

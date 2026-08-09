@@ -565,12 +565,25 @@ def flag_issues(links: list[dict], url_results: dict) -> list[dict]:
                 add(l["path"], l["value"], "duplicate_distribution_id",
                     f"@id used by {dist_id_counts[l['value']]} distributions — must be unique")
 
-    # 3. Relative paths in contentUrl
+    # 3. Relative paths in contentUrl — valid Croissant when paired with
+    # containedIn (the spec's own MovieLens example does exactly this: a
+    # relative contentUrl is resolved against the container it's inside).
+    # Some KBs store the key as the aliased "containedIn", others as the
+    # fully-qualified "cr:containedIn" — check both.
+    def _link_value(path: str) -> str:
+        link = link_map.get(path)
+        return link["value"] if link else ""
+
     for l in links:
-        if _DIST_URL_RE.match(l["path"]) and l["value"]:
+        m = _DIST_URL_RE.match(l["path"])
+        if m and l["value"]:
             if not l["value"].startswith(("http://", "https://", "ftp://")):
-                add(l["path"], l["value"], "relative_content_url",
-                    "contentUrl is a relative path, not an absolute URL")
+                prefix = m.group(1)
+                has_container = bool(_link_value(f"{prefix}.containedIn.@id")
+                                      or _link_value(f"{prefix}.cr:containedIn.@id"))
+                if not has_container:
+                    add(l["path"], l["value"], "relative_content_url",
+                        "contentUrl is a relative path, not an absolute URL")
 
     # 4. Wrong @type for distribution context
     for l in links:
@@ -1055,16 +1068,19 @@ def flag_structural_issues(metadata_json: str) -> list[dict]:
         if did in covered_ids:
             continue
         fmt = d.get("encodingFormat", "")
-        if fmt not in _TABULAR_ENCODING_FORMATS:
+        # encodingFormat is usually a string, but schema.org allows a list of values.
+        fmt_values = fmt if isinstance(fmt, list) else [fmt]
+        if not any(f in _TABULAR_ENCODING_FORMATS for f in fmt_values):
             continue
         if _content_size_bytes(d.get("contentSize")) == 0:
             continue  # empty file — nothing to extract a schema from
+        fmt_display = ", ".join(fmt_values) if isinstance(fmt, list) else fmt
         issues.append({
             "path":       f"distribution[{idx}]",
             "value":      d.get("name", did),
             "issue_type": "tabular_file_missing_recordset",
             "detail": (
-                f"'{d.get('name', did)}' has a tabular encodingFormat ({fmt}) "
+                f"'{d.get('name', did)}' has a tabular encodingFormat ({fmt_display}) "
                 f"but no RecordSet field sources from it. This file's columns "
                 f"are undocumented."
             ),

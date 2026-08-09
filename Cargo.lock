@@ -1716,6 +1716,7 @@ dependencies = [
  "rocket_sync_db_pools",
  "serde_json",
  "tera",
+ "tokio",
 ]
 
 [[package]]

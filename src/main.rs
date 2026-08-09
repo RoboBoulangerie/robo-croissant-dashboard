@@ -51,6 +51,77 @@ const VALID_DATA_TYPES: &[&str] = &[
 ];
 const CROISSANT_CONFORMS_TO: &str = "http://mlcommons.org/croissant/1.0";
 
+// Croissant files are JSON-LD documents (they carry an @context), so they're
+// exported as .jsonld, not .json.
+const FINAL_CROISSANTS_DIR: &str = "/Users/ekcarter/Desktop/robo-croissant-reviews/final_croissants";
+
+fn write_jsonld_file(path: &std::path::Path, metadata: &JsonValue) {
+    if let Some(dir) = path.parent() {
+        if let Err(e) = std::fs::create_dir_all(dir) {
+            warn!("final_croissants: could not create {}: {}", dir.display(), e);
+            return;
+        }
+    }
+    match serde_json::to_string_pretty(metadata) {
+        Ok(json) => {
+            if let Err(e) = std::fs::write(path, json) {
+                warn!("final_croissants: could not write {}: {}", path.display(), e);
+            }
+        }
+        Err(e) => warn!("final_croissants: could not serialize {}: {}", path.display(), e),
+    }
+}
+
+// Every save (per-field, full-JSON, or reconcile commit) gets its own
+// timestamped snapshot, so no save is ever silently overwritten.
+fn write_croissant_snapshot(name: &str, metadata: &JsonValue) {
+    let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let path = std::path::Path::new(FINAL_CROISSANTS_DIR).join(format!("{}_{}.jsonld", name, ts));
+    write_jsonld_file(&path, metadata);
+}
+
+// The single canonical "current final" file for a KB — overwritten only by
+// whole-document actions (full-JSON save, reconcile commit), not by
+// incremental per-field saves. This is what "export full JSON" now means:
+// saving IS exporting, straight to the correct Desktop directory.
+fn write_final_croissant(name: &str, metadata: &JsonValue) {
+    let path = std::path::Path::new(FINAL_CROISSANTS_DIR).join(format!("{}.jsonld", name));
+    write_jsonld_file(&path, metadata);
+}
+
+// Whole-document replaces (full-JSON save, reconcile commit) can reorder or
+// resize arrays like distribution/recordSet, leaving kb_links — and the
+// review grid / validation issues built from it — silently stale. Run
+// resync_kb_links.py synchronously (DB-only, fast) so it's caught immediately.
+async fn resync_kb_links_blocking(name: &str) -> String {
+    match rocket::tokio::process::Command::new("python3")
+        .args(["scripts/resync_kb_links.py", "--kb", name])
+        .output()
+        .await
+    {
+        Ok(out) if out.status.success() => "Synced review fields to the new document.".to_string(),
+        Ok(out) => {
+            warn!("resync_kb_links.py --kb {} failed: {}", name, String::from_utf8_lossy(&out.stderr));
+            "Field resync step failed — check server logs.".to_string()
+        }
+        Err(e) => {
+            warn!("could not run resync_kb_links.py: {}", e);
+            "Could not run field resync step — check server logs.".to_string()
+        }
+    }
+}
+
+// Validation does live URL checks and can be slow, so it's kicked off in the
+// background instead of blocking the response.
+fn spawn_background_validate(name: &str) {
+    if let Err(e) = rocket::tokio::process::Command::new("python3")
+        .args(["scripts/validate_all.py", "--kb", name])
+        .spawn()
+    {
+        warn!("could not start validate_all.py --kb {}: {}", name, e);
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(crate = "rocket::serde")]
 struct RecordSetGroup {
@@ -196,10 +267,12 @@ fn group_fields(fields: Vec<FieldEntry>) -> Vec<FieldGroup> {
     groups
 }
 
+static NATURAL_SORT_RE: OnceLock<Regex> = OnceLock::new();
+
 // Pad numeric indices in bracket notation so string sort == numeric sort.
 // e.g. "distribution[10]" → "distribution[00000010]"
 fn natural_sort_key(s: &str) -> String {
-    let re = Regex::new(r"\[(\d+)\]").unwrap();
+    let re = NATURAL_SORT_RE.get_or_init(|| Regex::new(r"\[(\d+)\]").unwrap());
     re.replace_all(s, |caps: &regex::Captures| {
         format!("[{:08}]", caps[1].parse::<u64>().unwrap_or(0))
     })
@@ -355,6 +428,18 @@ async fn index(db: Db) -> Result<Template> {
         .map(|r| (r.kb_name, (r.total, r.reviewed, r.auto_reviewed_count)))
         .collect();
 
+    // KBs with a staged version awaiting reconciliation (handles missing table gracefully)
+    let staged_kb_names: HashSet<String> = db
+        .run(|conn| {
+            db_schema::staged_kb_versions::table
+                .select(db_schema::staged_kb_versions::kb_name)
+                .load::<String>(conn)
+        })
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+
     // Per-KB validation issue counts (handles missing table gracefully)
     let issue_stats: HashMap<String, (i64, i64)> = db
         .run(|conn| {
@@ -388,6 +473,7 @@ async fn index(db: Db) -> Result<Template> {
                 issue_stats.get(name).copied().unwrap_or((0, 0));
             let pct = if total_fields > 0 { reviewed_fields * 100 / total_fields } else { 0 };
             let has_been_validated = auto_reviewed_count > 0 || total_issues > 0;
+            let has_staged_version = staged_kb_names.contains(name);
             serde_json::json!({
                 "name": name,
                 "url": url.as_ref().or(run_url.as_ref()),
@@ -400,6 +486,7 @@ async fn index(db: Db) -> Result<Template> {
                 "total_issues": total_issues,
                 "error_count": error_count,
                 "has_been_validated": has_been_validated,
+                "has_staged_version": has_staged_version,
             })
         })
         .collect();
@@ -522,7 +609,7 @@ async fn update_view(db: Db, name: String, page: Option<i64>) -> Result<Template
         })
         .collect();
 
-    page_fields.sort_by_key(|f| natural_sort_key(&f.path));
+    page_fields.sort_by_cached_key(|f| natural_sort_key(&f.path));
 
     // Paths that have different values across runs — used for change indicator
     let name6 = name.clone();
@@ -600,6 +687,8 @@ struct UpdateFullJson {
 #[post("/update/<name>", data = "<form>")]
 async fn update(db: Db, name: String, form: Form<UpdateFullJson>) -> Result<Redirect> {
     let metadata: JsonValue = serde_json::from_str(&form.croissant_metadata).map_err(|e| Debug(diesel::result::Error::DeserializationError(Box::new(e))))?;
+    let metadata_for_export = metadata.clone();
+    let name2 = name.clone();
 
     db.run(move |conn| {
         diesel::update(db_schema::knowledge_bases::table.filter(db_schema::knowledge_bases::name.eq(name)))
@@ -607,6 +696,10 @@ async fn update(db: Db, name: String, form: Form<UpdateFullJson>) -> Result<Redi
             .execute(conn)
     })
     .await?;
+    write_croissant_snapshot(&name2, &metadata_for_export);
+    write_final_croissant(&name2, &metadata_for_export);
+    resync_kb_links_blocking(&name2).await;
+    spawn_background_validate(&name2);
 
     Ok(Redirect::to(uri!(index)))
 }
@@ -621,6 +714,7 @@ struct UpdateFieldsForm {
 async fn update_fields(db: Db, name: String, page: Option<i64>, form: Form<UpdateFieldsForm>) -> Result<Redirect> {
     info!("{}", form.fields_json);
     let updates: Vec<JsonValue> = serde_json::from_str(&form.fields_json).map_err(|e| Debug(diesel::result::Error::DeserializationError(Box::new(e))))?;
+    let metadata_changed = !updates.is_empty();
 
     let name1 = name.clone();
     let mut kb: db_model::KnowledgeBase = db
@@ -724,6 +818,10 @@ async fn update_fields(db: Db, name: String, page: Option<i64>, form: Form<Updat
             })
             .await?;
         }
+    }
+
+    if metadata_changed {
+        write_croissant_snapshot(&name, &kb.croissant_metadata);
     }
 
     Ok(Redirect::to(uri!(update_view(name = name, page = page))))
@@ -1518,7 +1616,7 @@ async fn compare_seek(db: Db, kb_name: String, path: String) -> Redirect {
         .collect();
 
     let mut sorted = all_paths;
-    sorted.sort_by_key(|p| natural_sort_key(p));
+    sorted.sort_by_cached_key(|p| natural_sort_key(p));
 
     let page = sorted.iter().position(|p| p == &path)
         .map(|idx| idx as i64 / COMPARE_PAGE_SIZE)
@@ -1707,6 +1805,244 @@ async fn apply_fix(db: Db, name: String, body: Json<serde_json::Value>) -> Resul
     Ok(Json(serde_json::json!({ "ok": true, "fix_type": fix_type })))
 }
 
+// ── Reconcile routes ───────────────────────────────────────────────────────────
+
+const RECONCILE_SKIP_KEYS: &[&str] = &["@context", "distribution", "recordSet"];
+
+fn json_display(v: Option<&JsonValue>) -> String {
+    match v {
+        None | Some(JsonValue::Null) => String::new(),
+        Some(JsonValue::String(s)) => s.clone(),
+        Some(other) => serde_json::to_string_pretty(other).unwrap_or_default(),
+    }
+}
+
+fn json_raw(v: Option<&JsonValue>) -> String {
+    match v {
+        None => "null".to_string(),
+        Some(other) => serde_json::to_string(other).unwrap_or_else(|_| "null".to_string()),
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(crate = "rocket::serde")]
+struct ReconcileRow {
+    key: String,
+    current_present: bool,
+    current_display: String,
+    current_json: String,
+    staged_present: bool,
+    staged_display: String,
+    staged_json: String,
+    default_choice: String,
+    is_provenance: bool,
+}
+
+#[get("/reconcile/<name>")]
+async fn reconcile_view(db: Db, name: String) -> Result<Template> {
+    let name1 = name.clone();
+    let current: db_model::KnowledgeBase = db
+        .run(move |conn| db_schema::knowledge_bases::table
+            .filter(db_schema::knowledge_bases::name.eq(name1))
+            .first(conn))
+        .await?;
+
+    let name2 = name.clone();
+    let staged: Option<db_model::StagedKbVersion> = db
+        .run(move |conn| db_schema::staged_kb_versions::table
+            .filter(db_schema::staged_kb_versions::kb_name.eq(name2))
+            .first(conn)
+            .optional())
+        .await?;
+
+    let staged = match staged {
+        Some(s) => s,
+        None => {
+            return Ok(Template::render(
+                "reconcile",
+                context! {
+                    title: format!("Reconcile: {}", name),
+                    kb_name: name,
+                    no_staged_version: true,
+                },
+            ));
+        }
+    };
+
+    let name3 = name.clone();
+    let staged_issues: Vec<db_model::StagedKbIssue> = db
+        .run(move |conn| db_schema::staged_kb_issues::table
+            .filter(db_schema::staged_kb_issues::kb_name.eq(name3))
+            .load(conn))
+        .await
+        .unwrap_or_default();
+
+    let issue_banner: Vec<JsonValue> = staged_issues
+        .iter()
+        .map(|i| {
+            let (label, severity) = issue_type_meta(&i.issue_type);
+            serde_json::json!({
+                "label": label,
+                "severity": severity,
+                "path": i.path,
+                "value": i.value,
+                "detail": i.detail,
+            })
+        })
+        .collect();
+
+    let current_obj = current.croissant_metadata.as_object().cloned().unwrap_or_default();
+    let staged_obj = staged.croissant_metadata.as_object().cloned().unwrap_or_default();
+
+    let mut keys: Vec<String> = current_obj.keys().chain(staged_obj.keys()).cloned().collect();
+    keys.sort();
+    keys.dedup();
+
+    let mut rows: Vec<ReconcileRow> = Vec::new();
+    for key in keys {
+        if RECONCILE_SKIP_KEYS.contains(&key.as_str()) {
+            continue;
+        }
+        let cur_val = current_obj.get(&key);
+        let staged_val = staged_obj.get(&key);
+        if cur_val == staged_val {
+            continue; // identical — nothing to reconcile
+        }
+        let current_present = cur_val.is_some();
+        let staged_present = staged_val.is_some();
+        let default_choice = if !current_present && staged_present {
+            "staged"
+        } else {
+            "current" // covers: missing from staged, and genuine conflicts (safe default)
+        };
+        rows.push(ReconcileRow {
+            key: key.clone(),
+            current_present,
+            current_display: json_display(cur_val),
+            current_json: json_raw(cur_val),
+            staged_present,
+            staged_display: json_display(staged_val),
+            staged_json: json_raw(staged_val),
+            default_choice: default_choice.to_string(),
+            is_provenance: key == "dct:provenance",
+        });
+    }
+
+    let current_dist_count = current_obj.get("distribution").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
+    let staged_dist_count = staged_obj.get("distribution").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
+    let current_rs_count = current_obj.get("recordSet").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
+    let staged_rs_count = staged_obj.get("recordSet").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
+    let dist_recordset_differs = current_obj.get("distribution") != staged_obj.get("distribution")
+        || current_obj.get("recordSet") != staged_obj.get("recordSet");
+    let dist_recordset_default = if current_dist_count == 0 && current_rs_count == 0 && (staged_dist_count > 0 || staged_rs_count > 0) {
+        "staged"
+    } else {
+        "current"
+    };
+
+    Ok(Template::render(
+        "reconcile",
+        context! {
+            title: format!("Reconcile: {}", name),
+            kb_name: name,
+            no_staged_version: false,
+            source_label: staged.source_label,
+            staged_at: staged.staged_at,
+            rows: rows,
+            issue_banner: issue_banner,
+            current_dist_count: current_dist_count,
+            staged_dist_count: staged_dist_count,
+            current_rs_count: current_rs_count,
+            staged_rs_count: staged_rs_count,
+            dist_recordset_differs: dist_recordset_differs,
+            dist_recordset_default: dist_recordset_default,
+        },
+    ))
+}
+
+#[post("/reconcile/<name>/commit", format = "json", data = "<body>")]
+async fn reconcile_commit(db: Db, name: String, body: Json<serde_json::Value>) -> Result<Json<serde_json::Value>> {
+    let name1 = name.clone();
+    let current: db_model::KnowledgeBase = db
+        .run(move |conn| db_schema::knowledge_bases::table
+            .filter(db_schema::knowledge_bases::name.eq(name1))
+            .first(conn))
+        .await?;
+
+    let name2 = name.clone();
+    let staged: db_model::StagedKbVersion = db
+        .run(move |conn| db_schema::staged_kb_versions::table
+            .filter(db_schema::staged_kb_versions::kb_name.eq(name2))
+            .first(conn))
+        .await?;
+
+    let mut final_doc = current.croissant_metadata.clone();
+    let final_obj = match final_doc.as_object_mut() {
+        Some(o) => o,
+        None => return Ok(Json(serde_json::json!({ "error": "current metadata is not a JSON object" }))),
+    };
+    let staged_obj = staged.croissant_metadata.as_object().cloned().unwrap_or_default();
+
+    let field_resolutions = body["field_resolutions"].as_object().cloned().unwrap_or_default();
+    for (key, resolution) in field_resolutions.iter() {
+        let source = resolution["source"].as_str().unwrap_or("current");
+        match source {
+            "current" => {} // already the base — nothing to do
+            "staged" => {
+                match staged_obj.get(key) {
+                    Some(v) => { final_obj.insert(key.clone(), v.clone()); }
+                    None => { final_obj.remove(key); }
+                }
+            }
+            "edit" => {
+                final_obj.insert(key.clone(), resolution["value"].clone());
+            }
+            "restructure" => {
+                final_obj.remove(key);
+                if let Some(merge_obj) = resolution["value"].as_object() {
+                    for (mk, mv) in merge_obj.iter() {
+                        final_obj.insert(mk.clone(), mv.clone());
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let dist_recordset_choice = body["dist_recordset_choice"].as_str().unwrap_or("current");
+    if dist_recordset_choice == "staged" {
+        match staged_obj.get("distribution") {
+            Some(v) => { final_obj.insert("distribution".to_string(), v.clone()); }
+            None => { final_obj.remove("distribution"); }
+        }
+        match staged_obj.get("recordSet") {
+            Some(v) => { final_obj.insert("recordSet".to_string(), v.clone()); }
+            None => { final_obj.remove("recordSet"); }
+        }
+    }
+
+    let name3 = name.clone();
+    let final_doc_for_export = final_doc.clone();
+    db.run(move |conn| {
+        diesel::update(db_schema::knowledge_bases::table.filter(db_schema::knowledge_bases::name.eq(name3)))
+            .set(db_schema::knowledge_bases::croissant_metadata.eq(final_doc))
+            .execute(conn)
+    })
+    .await?;
+    write_croissant_snapshot(&name, &final_doc_for_export);
+    write_final_croissant(&name, &final_doc_for_export);
+    let resync_note = resync_kb_links_blocking(&name).await;
+    spawn_background_validate(&name);
+
+    Ok(Json(serde_json::json!({
+        "ok": true,
+        "next_steps": format!(
+            "Committed. {} Validation is running in the background — reload in a few seconds to see updated issues.",
+            resync_note
+        ),
+    })))
+}
+
 #[launch]
 fn rocket() -> _ {
     rocket::build()
@@ -1735,6 +2071,25 @@ fn rocket() -> _ {
                             );
                             CREATE INDEX IF NOT EXISTS idx_run_links_kb_path
                                 ON run_links(kb_name, path);
+                            CREATE INDEX IF NOT EXISTS idx_kb_links_kb_name
+                                ON kb_links(kb_name);
+                            CREATE INDEX IF NOT EXISTS idx_validation_issues_kb_name
+                                ON validation_issues(kb_name);
+                            CREATE TABLE IF NOT EXISTS staged_kb_versions (
+                                kb_name            TEXT NOT NULL PRIMARY KEY,
+                                source_label       TEXT NOT NULL,
+                                croissant_metadata TEXT NOT NULL,
+                                staged_at          TEXT NOT NULL
+                            );
+                            CREATE TABLE IF NOT EXISTS staged_kb_issues (
+                                kb_name    TEXT NOT NULL,
+                                issue_type TEXT NOT NULL,
+                                path       TEXT NOT NULL,
+                                value      TEXT NOT NULL,
+                                detail     TEXT NOT NULL
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_staged_kb_issues_kb
+                                ON staged_kb_issues(kb_name);
                         ").ok();
                     }).await;
                     Ok(rocket)
@@ -1742,7 +2097,7 @@ fn rocket() -> _ {
                 None => Err(rocket),
             }
         }))
-        .mount("/", routes![index, knowledge_base, names, update_view, update, update_fields, validate, issues_view, runs_view, runs_update, compare_view, compare_seek, suggest_fixes, apply_fix])
+        .mount("/", routes![index, knowledge_base, names, update_view, update, update_fields, validate, issues_view, runs_view, runs_update, compare_view, compare_seek, suggest_fixes, apply_fix, reconcile_view, reconcile_commit])
 }
 
 #[cfg(test)]

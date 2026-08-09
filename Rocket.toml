@@ -3,9 +3,11 @@ ident = "Robo Croissant"
 template_dir = "templates"
 
 [default.limits]
-json = "1 MiB"
+json = "50 MiB"
 msgpack = "2 MiB"
 "file/jpg" = "5 MiB"
+form = "50 MiB"
+string = "50 MiB"
 
 [default.databases.diesel]
 url = "db/robo_croissant.db"
