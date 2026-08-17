@@ -35,6 +35,16 @@
         white-space: nowrap;
     }
     .btn-compare:hover { background: #5a32a3; }
+    .btn-reconcile {
+        background: #fd7e14;
+        color: white;
+        padding: 5px 12px;
+        border-radius: 4px;
+        font-size: 12px;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+    .btn-reconcile:hover { background: #dc6c0a; }
     .progress-bar-wrap {
         background: #e9ecef;
         border-radius: 4px;
@@ -133,9 +143,12 @@
             {% if s.in_working_db %}
             <button type="button" class="btn btn-validate" onclick="validateEntry(this, '{{ s.name }}')">Schema.org Test ↗</button>
             <a href="/update/{{ s.name }}" class="btn btn-update">Review Fields</a>
-            <a href="/knowledge_base/{{ s.name }}" class="btn btn-download" download="{{ s.name }}.json">Download</a>
+            <a href="/knowledge_base/{{ s.name }}" class="btn btn-download" download="{{ s.name }}.jsonld">Download</a>
             {% endif %}
             <a href="/compare/{{ s.name | urlencode }}" class="btn-compare">Compare Runs</a>
+            {% if s.has_staged_version %}
+            <a href="/reconcile/{{ s.name | urlencode }}" class="btn-reconcile">Reconcile</a>
+            {% endif %}
         </td>
     </tr>
     {% endfor %}

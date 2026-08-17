@@ -51,3 +51,22 @@ table! {
         created_at -> diesel::sql_types::Text,
     }
 }
+
+table! {
+    staged_kb_versions (kb_name) {
+        kb_name -> diesel::sql_types::Text,
+        source_label -> diesel::sql_types::Text,
+        croissant_metadata -> diesel::sql_types::Json,
+        staged_at -> diesel::sql_types::Text,
+    }
+}
+
+table! {
+    staged_kb_issues (kb_name, issue_type, path) {
+        kb_name -> diesel::sql_types::Text,
+        issue_type -> diesel::sql_types::Text,
+        path -> diesel::sql_types::Text,
+        value -> diesel::sql_types::Text,
+        detail -> diesel::sql_types::Text,
+    }
+}

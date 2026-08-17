@@ -485,12 +485,6 @@
             <input type="hidden" name="accepted_json" id="accepted-json-input">
             <button type="submit" id="save-btn" class="btn btn-update" disabled>Save Progress</button>
         </form>
-        <a id="export-btn"
-           href="/knowledge_base/{{ item.name }}"
-           download="{{ item.name }}.json"
-           class="btn-export">
-            Export JSON
-        </a>
     </div>
 </div>
 
@@ -652,19 +646,43 @@
 </div>
 {% endif %}
 
-<!-- Full JSON editor -->
+<!-- Full JSON editor — loaded on demand so large KBs don't pay to render/escape
+     the whole document into every paginated page load. Saving here also
+     writes the canonical <name>.jsonld export directly to the Desktop
+     final_croissants folder — no separate export step needed. -->
 <div class="full-json-section">
-    <h4>Full Croissant Metadata (JSON)</h4>
+    <h4>Full Croissant Metadata (JSON-LD)</h4>
     <form action="/update/{{ item.name }}" method="POST">
-        <textarea name="croissant_metadata">{{ item.croissant_metadata | json_encode(pretty=true) }}</textarea>
-        <div class="button-group">
+        <div id="full-json-loader">
+            <button type="button" class="btn btn-update" onclick="loadFullJson(this)">Load Full JSON to Edit</button>
+        </div>
+        <textarea name="croissant_metadata" id="full-json-textarea" style="display:none"></textarea>
+        <div class="button-group" id="full-json-actions" style="display:none">
             <a href="/" class="btn-cancel-link">Cancel</a>
-            <button type="submit" class="btn btn-update">Save Full JSON</button>
+            <button type="submit" class="btn btn-update">Save &amp; Export Final JSON-LD</button>
         </div>
     </form>
 </div>
 
 <script>
+function loadFullJson(btn) {
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+    fetch('/knowledge_base/{{ item.name | urlencode }}')
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            document.getElementById('full-json-textarea').value = JSON.stringify(data, null, 2);
+            document.getElementById('full-json-textarea').style.display = 'block';
+            document.getElementById('full-json-actions').style.display = 'flex';
+            document.getElementById('full-json-loader').style.display = 'none';
+        })
+        .catch(function () {
+            alert('Failed to load metadata.');
+            btn.disabled = false;
+            btn.textContent = 'Load Full JSON to Edit';
+        });
+}
+
 function toggleSchema() {
     var body = document.getElementById('schema-body');
     var icon = document.getElementById('schema-icon');
@@ -862,18 +880,6 @@ document.getElementById('changes-form').addEventListener('submit', function(e) {
     if (edits.length === 0 && newAccepts.length === 0) { e.preventDefault(); return; }
     document.getElementById('fields-json-input').value = JSON.stringify(edits);
     document.getElementById('accepted-json-input').value = JSON.stringify(newAccepts);
-});
-
-// Stamp export filename with current datetime on click
-document.getElementById('export-btn').addEventListener('click', function() {
-    var d = new Date();
-    var ts = d.getFullYear().toString() +
-        ('0' + (d.getMonth() + 1)).slice(-2) +
-        ('0' + d.getDate()).slice(-2) + '_' +
-        ('0' + d.getHours()).slice(-2) +
-        ('0' + d.getMinutes()).slice(-2) +
-        ('0' + d.getSeconds()).slice(-2);
-    this.download = '{{ item.name }}_' + ts + '.json';
 });
 
 // ── Suggested fixes ──────────────────────────────────────────────────────────

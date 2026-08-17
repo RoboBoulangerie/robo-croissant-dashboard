@@ -127,6 +127,26 @@ def ensure_run_tables(conn: sqlite3.Connection):
     """)
 
 
+def ensure_staged_tables(conn: sqlite3.Connection):
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS staged_kb_versions (
+            kb_name            TEXT NOT NULL PRIMARY KEY,
+            source_label       TEXT NOT NULL,
+            croissant_metadata TEXT NOT NULL,
+            staged_at          TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS staged_kb_issues (
+            kb_name    TEXT NOT NULL,
+            issue_type TEXT NOT NULL,
+            path       TEXT NOT NULL,
+            value      TEXT NOT NULL,
+            detail     TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_staged_kb_issues_kb
+            ON staged_kb_issues(kb_name);
+    """)
+
+
 # ── Link insertion helpers ────────────────────────────────────────────────────
 
 def insert_run_links(
@@ -163,6 +183,62 @@ def backfill_kb_links(
             [(kb_name, path, val) for path, val in missing],
         )
     return len(missing)
+
+
+def resync_kb_links(
+    conn: sqlite3.Connection,
+    kb_name: str,
+    metadata: dict,
+    dry_run: bool = False,
+) -> dict:
+    """
+    Make kb_links for kb_name exactly match extract_leaves(metadata): removes
+    rows for paths no longer present (e.g. after an array was reordered or
+    shrunk), updates rows whose value changed at a still-present path
+    (resetting reviewed/auto_reviewed there, since a prior human approval no
+    longer applies to the new content), and adds any genuinely new paths.
+
+    Unlike backfill_kb_links (purely additive — fine for importing a KB for
+    the first time), this is needed after a *whole-document replace* (full
+    JSON save, reconcile commit), where distribution/recordSet reordering or
+    resizing can otherwise leave kb_links silently stale and out of sync with
+    croissant_metadata.
+
+    Returns {"added": n, "removed": n, "updated": n}.
+    """
+    new_leaves = dict(extract_leaves(metadata))
+
+    cur = conn.cursor()
+    cur.execute("SELECT path, value FROM kb_links WHERE kb_name = ?", (kb_name,))
+    existing = {path: value for path, value in cur.fetchall()}
+
+    to_add = [p for p in new_leaves if p not in existing]
+    to_remove = [p for p in existing if p not in new_leaves]
+    to_update = [p for p in new_leaves if p in existing and existing[p] != new_leaves[p]]
+
+    if not dry_run:
+        for start in range(0, len(to_remove), 500):
+            chunk = to_remove[start:start + 500]
+            ph = ",".join("?" * len(chunk))
+            cur.execute(
+                f"DELETE FROM kb_links WHERE kb_name = ? AND path IN ({ph})",
+                [kb_name] + chunk,
+            )
+        if to_update:
+            cur.executemany(
+                "UPDATE kb_links SET value = ?, reviewed = 0, auto_reviewed = 0 "
+                "WHERE kb_name = ? AND path = ?",
+                [(new_leaves[p], kb_name, p) for p in to_update],
+            )
+        if to_add:
+            cur.executemany(
+                "INSERT INTO kb_links (kb_name, path, value, url, confidence, reviewed) "
+                "VALUES (?, ?, ?, '', 0.0, 0)",
+                [(kb_name, p, new_leaves[p]) for p in to_add],
+            )
+        conn.commit()
+
+    return {"added": len(to_add), "removed": len(to_remove), "updated": len(to_update)}
 
 
 # ── Run discovery ─────────────────────────────────────────────────────────────

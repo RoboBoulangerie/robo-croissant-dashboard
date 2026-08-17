@@ -565,12 +565,25 @@ def flag_issues(links: list[dict], url_results: dict) -> list[dict]:
                 add(l["path"], l["value"], "duplicate_distribution_id",
                     f"@id used by {dist_id_counts[l['value']]} distributions — must be unique")
 
-    # 3. Relative paths in contentUrl
+    # 3. Relative paths in contentUrl — valid Croissant when paired with
+    # containedIn (the spec's own MovieLens example does exactly this: a
+    # relative contentUrl is resolved against the container it's inside).
+    # Some KBs store the key as the aliased "containedIn", others as the
+    # fully-qualified "cr:containedIn" — check both.
+    def _link_value(path: str) -> str:
+        link = link_map.get(path)
+        return link["value"] if link else ""
+
     for l in links:
-        if _DIST_URL_RE.match(l["path"]) and l["value"]:
+        m = _DIST_URL_RE.match(l["path"])
+        if m and l["value"]:
             if not l["value"].startswith(("http://", "https://", "ftp://")):
-                add(l["path"], l["value"], "relative_content_url",
-                    "contentUrl is a relative path, not an absolute URL")
+                prefix = m.group(1)
+                has_container = bool(_link_value(f"{prefix}.containedIn.@id")
+                                      or _link_value(f"{prefix}.cr:containedIn.@id"))
+                if not has_container:
+                    add(l["path"], l["value"], "relative_content_url",
+                        "contentUrl is a relative path, not an absolute URL")
 
     # 4. Wrong @type for distribution context
     for l in links:
@@ -885,6 +898,28 @@ def _tabular_compressed_inner(url: str) -> str:
     return ""
 _REQUIRED_TOP_LEVEL = ["name", "description", "url", "license", "conformsTo"]
 
+# encodingFormat values with well-defined columns — a FileObject in one of
+# these formats should be sourced by some RecordSet field, unless it's empty.
+_TABULAR_ENCODING_FORMATS = {
+    "text/csv",
+    "text/tab-separated-values",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/parquet",
+    "application/jsonlines",
+    "application/x-ndjson",
+}
+
+
+def _content_size_bytes(size_str) -> int | None:
+    """Parse a contentSize string like '52498 B' into an int, or None if unparseable."""
+    if not size_str:
+        return None
+    try:
+        return int(str(size_str).strip().split()[0])
+    except (ValueError, IndexError):
+        return None
+
 
 def flag_structural_issues(metadata_json: str) -> list[dict]:
     """Detect spec violations that require reading the full metadata JSON."""
@@ -1008,6 +1043,76 @@ def flag_structural_issues(metadata_json: str) -> list[dict]:
     # Note: recordSets with identical field schemas are NOT flagged.
     # Croissant 1.1 has no schema inheritance, so separate recordSets for
     # semantically distinct datasets that share column structure is correct.
+
+    # ── 4. Tabular-format files with no RecordSet coverage ───────────────────
+    covered_ids: set[str] = set()
+    for rs in record_sets:
+        if not isinstance(rs, dict):
+            continue
+        for f in rs.get("field", []):
+            if not isinstance(f, dict):
+                continue
+            src = f.get("source", {})
+            if not isinstance(src, dict):
+                continue
+            fo, fs = src.get("fileObject"), src.get("fileSet")
+            if isinstance(fo, dict) and fo.get("@id"):
+                covered_ids.add(fo["@id"])
+            if isinstance(fs, dict) and fs.get("@id"):
+                covered_ids.add(fs["@id"])
+
+    for idx, d in enumerate(dists):
+        if not isinstance(d, dict) or d.get("@type") != "cr:FileObject":
+            continue
+        did = d.get("@id", f"distribution[{idx}]")
+        if did in covered_ids:
+            continue
+        fmt = d.get("encodingFormat", "")
+        # encodingFormat is usually a string, but schema.org allows a list of values.
+        fmt_values = fmt if isinstance(fmt, list) else [fmt]
+        if not any(f in _TABULAR_ENCODING_FORMATS for f in fmt_values):
+            continue
+        if _content_size_bytes(d.get("contentSize")) == 0:
+            continue  # empty file — nothing to extract a schema from
+        fmt_display = ", ".join(fmt_values) if isinstance(fmt, list) else fmt
+        issues.append({
+            "path":       f"distribution[{idx}]",
+            "value":      d.get("name", did),
+            "issue_type": "tabular_file_missing_recordset",
+            "detail": (
+                f"'{d.get('name', did)}' has a tabular encodingFormat ({fmt_display}) "
+                f"but no RecordSet field sources from it. This file's columns "
+                f"are undocumented."
+            ),
+        })
+
+    # ── 5. dct:provenance present as a top-level key ──────────────────────────
+    # Croissant 1.1 has no top-level 'dct:provenance' property — provenance is
+    # expressed via top-level 'prov:*' properties (prov:wasGeneratedBy, etc.).
+    # A single dct:provenance blob is non-compliant regardless of its content,
+    # and doubly so when that content isn't even parseable as JSON.
+    if "dct:provenance" in metadata:
+        prov = metadata["dct:provenance"]
+        prov_str = prov if isinstance(prov, str) else json.dumps(prov)
+        try:
+            json.loads(prov_str)
+            parses = True
+        except Exception:
+            parses = False
+        detail = (
+            "Top-level 'dct:provenance' is not valid Croissant 1.1 — provenance "
+            "must be expressed as top-level 'prov:*' properties "
+            "(e.g. prov:wasGeneratedBy, prov:wasDerivedFrom), not a single "
+            "dct:provenance blob."
+        )
+        if not parses:
+            detail += " Its value is also not valid parseable JSON."
+        issues.append({
+            "path":       "dct:provenance",
+            "value":      str(prov)[:200],
+            "issue_type": "provenance_noncompliant",
+            "detail":     detail,
+        })
 
     return issues
 

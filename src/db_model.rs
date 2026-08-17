@@ -49,3 +49,24 @@ pub(crate) struct ValidationIssue {
     pub detail: String,
     pub created_at: String,
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize, Queryable, Insertable, AsChangeset)]
+#[serde(crate = "rocket::serde")]
+#[diesel(table_name = db_schema::staged_kb_versions)]
+pub(crate) struct StagedKbVersion {
+    pub kb_name: String,
+    pub source_label: String,
+    pub croissant_metadata: JsonValue,
+    pub staged_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Queryable)]
+#[serde(crate = "rocket::serde")]
+#[diesel(table_name = db_schema::staged_kb_issues)]
+pub(crate) struct StagedKbIssue {
+    pub kb_name: String,
+    pub issue_type: String,
+    pub path: String,
+    pub value: String,
+    pub detail: String,
+}

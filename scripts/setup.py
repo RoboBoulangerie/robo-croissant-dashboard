@@ -1,6 +1,8 @@
 """
 One-command dashboard setup. Discovers pipeline runs in a directory, imports
-them all, promotes any new KBs to the working DB, backfills, and validates.
+them all, promotes any brand-new KBs to the working DB, stages any changed
+re-runs of KBs already in the working DB for reconciliation (/reconcile/<name>),
+backfills, and validates.
 
 Run this instead of the individual scripts:
 
@@ -30,6 +32,7 @@ import sys
 from lib import (
     discover_runs,
     ensure_run_tables,
+    ensure_staged_tables,
     hash_file,
     hash_json_dir,
     load_kb_name_map,
@@ -37,6 +40,7 @@ from lib import (
 )
 from import_run import import_db, import_json_dir
 from promote_kbs import promote_from_db
+from stage_kb import stage_kb
 
 MASTER_DB = "db/robo_croissant.db"
 
@@ -201,42 +205,87 @@ def main():
 
     print()
 
-    # ── 3. Promote new KBs to working DB ─────────────────────────────────────
-    print("── Step 2: Promote new KBs to working DB ─────────────────────────")
+    # ── 3. Promote new KBs / stage changed KBs for reconciliation ─────────────
+    print("── Step 2: Promote new KBs, stage changed KBs for reconciliation ─")
     existing_kbs = {row[0] for row in conn.execute("SELECT name FROM knowledge_bases")}
 
-    # Determine which source DB to promote from.
+    # Determine which source DBs to scan.
     # Default: scan runs newest-to-oldest, use the first run that has each KB.
-    source_dbs = [r["path"] for r in reversed(runs) if r["is_db"]]
-    if not source_dbs:
-        print("  No .db files found — JSON-only runs cannot promote KBs (no metadata JSON).")
-        print("  Skipping promote step.\n")
+    source_runs = [r for r in reversed(runs) if r["is_db"]]
+    if not source_runs:
+        print("  No .db files found — JSON-only runs cannot promote/reconcile KBs (no metadata JSON).")
+        print("  Skipping promote/reconcile step.\n")
     else:
         if promote_from_filter:
-            source_dbs = [p for p in source_dbs if promote_from_filter in p]
-            if not source_dbs:
+            source_runs = [r for r in source_runs if promote_from_filter in r["path"]]
+            if not source_runs:
                 print(f"  --promote-from '{promote_from_filter}' matched no runs.")
-                source_dbs = []
+
+        ensure_staged_tables(conn)
 
         promoted_total = 0
-        for src_path in source_dbs:
+        staged_total = 0
+        reconciled_this_run: set[str] = set()  # avoid restaging from an older run once handled
+
+        for r in source_runs:
+            src_path = r["path"]
+            label = " · ".join(p for p in [r["run_date"], r["model"]] if p) or r["dir_name"]
+
             src = sqlite3.connect(src_path)
             src_kbs = {row[0] for row in src.execute("SELECT name FROM knowledge_bases")}
-            src.close()
-            new_here = src_kbs - existing_kbs
-            if not new_here:
-                continue
 
-            print(f"  From {os.path.basename(os.path.dirname(src_path))}: "
-                  f"{len(new_here)} new KB(s) — {', '.join(sorted(new_here))}")
-            totals = promote_from_db(src_path, conn, only=new_here, dry_run=dry_run)
-            if not dry_run:
+            # New KBs: promote wholesale (never overwrites an existing working copy)
+            new_here = src_kbs - existing_kbs
+            if new_here:
+                print(f"  From {label}: {len(new_here)} new KB(s) — promoting: {', '.join(sorted(new_here))}")
+                totals = promote_from_db(src_path, conn, only=new_here, dry_run=dry_run)
+                if not dry_run:
+                    conn.commit()
+                    existing_kbs |= new_here
+                promoted_total += len(totals)
+
+            # Re-runs of known KBs: stage for reconciliation if the metadata actually changed
+            candidates = sorted((src_kbs & existing_kbs) - reconciled_this_run)
+            for kb_name in candidates:
+                src_row = src.execute(
+                    "SELECT croissant_metadata FROM knowledge_bases WHERE name = ?", (kb_name,)
+                ).fetchone()
+                working_row = conn.execute(
+                    "SELECT croissant_metadata FROM knowledge_bases WHERE name = ?", (kb_name,)
+                ).fetchone()
+                if not src_row or not working_row:
+                    continue
+                try:
+                    changed = json.loads(src_row[0], strict=False) != json.loads(working_row[0], strict=False)
+                except Exception:
+                    changed = src_row[0] != working_row[0]
+                if not changed:
+                    continue
+
+                reconciled_this_run.add(kb_name)
+                if dry_run:
+                    print(f"  {kb_name}: changed in {label} — would stage for reconciliation")
+                    staged_total += 1
+                    continue
+                try:
+                    issue_count = stage_kb(kb_name, src_path, conn, label=label)
+                except RuntimeError as e:
+                    print(f"  {kb_name}: SKIP staging — {e}")
+                    continue
                 conn.commit()
-                existing_kbs |= new_here
-            promoted_total += len(totals)
+                staged_total += 1
+                print(f"  {kb_name}: changed in {label} — staged for reconciliation "
+                      f"({issue_count} structural issue(s) in staged version)")
+
+            src.close()
 
         if promoted_total == 0:
-            print("  All KBs already in working DB — nothing to promote.")
+            print("  No new KBs to promote.")
+        if staged_total == 0:
+            print("  No changed KBs to reconcile.")
+        elif not dry_run:
+            print(f"  → {staged_total} KB(s) staged. Review each at /reconcile/<name> "
+                  f"or via the Reconcile button on the home page.")
         print()
 
     # ── 4. Backfill gaps in working KB links ──────────────────────────────────
